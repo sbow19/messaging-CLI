@@ -11,11 +11,6 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-type LoginDetails struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
 func main() {
 	origin := "ws://localhost:8000/" // needed by the x/net/websocket client
 
@@ -25,14 +20,16 @@ func main() {
 		log.Fatalf("Failed to create config: %v", err)
 	}
 
-	// Encode username and password for Basic header
-	encoded := base64.StdEncoding.EncodeToString([]byte("123456:"))
+	// Get random id
+	randomId, _ := generateAPIKey()
+
+	encoded := base64.StdEncoding.EncodeToString(fmt.Appendf([]byte{}, "%q:", randomId))
 
 	config.Header = http.Header{
 		"Authorization": []string{"Basic " + encoded},
 	}
 
-	// Dial and upgrade the connection
+	// Set up initial handshake with server
 	ws, err := websocket.DialConfig(config)
 	if err != nil {
 		log.Fatalf("WebSocket upgrade failed: %v", err)
@@ -40,49 +37,106 @@ func main() {
 
 	defer ws.Close()
 
-	// 1. Send login credentials
-	login := LoginDetails{
-		Username: "hello",
-		Password: "password",
-	}
-	if err := websocket.JSON.Send(ws, login); err != nil {
-		log.Fatalf("Failed to send login: %v", err)
+	// Listen to initial handshakes
+	var authReply AuthResponse
+
+handshake:
+	for {
+		if e := websocket.JSON.Receive(ws, &authReply); e != nil {
+			log.Fatal(e)
+		}
+
+		switch authReply.Code {
+		case LoginDetailsRequired, NewLoginDetails:
+			break handshake
+		}
+
 	}
 
-	// 2. Read login response
-	var loginResp string
-	if err := websocket.Message.Receive(ws, &loginResp); err != nil {
-		log.Fatalf("Failed to receive login response: %v", err)
-	}
-	fmt.Println("Server:", loginResp)
-
-	if loginResp != "Thank you for the message" {
-		fmt.Println("Login failed or not accepted. Exiting.")
-		return
-	}
-
-	// 3. Message loop (you → server)
+	// Create new input buffer scanner
 	scanner := bufio.NewScanner(os.Stdin)
-	fmt.Println("Enter messages to send (Ctrl+C to quit):")
+
+authLoop:
+	for {
+
+		switch authReply.Code {
+		case LoginSuccessful:
+			break authLoop
+		case IncorrectLogin:
+			fmt.Println("Incorrect login details")
+			fmt.Println("Enter username (Ctrl+C to quit):")
+			scanner.Scan()
+			username := scanner.Text()
+			fmt.Println("Enter password (Ctrl+C to quit):")
+			scanner.Scan()
+			password := scanner.Text()
+
+			// Send details to backend
+			login := &LoginDetails{
+				Username: username,
+				Password: password,
+			}
+
+			err := websocket.JSON.Send(ws, login)
+			if err != nil {
+				ws.Close()
+				log.Fatal("Error sending login details")
+			}
+		case NewLoginDetails, LoginDetailsRequired:
+			fmt.Println("Enter login details")
+
+			fmt.Println("Enter username (Ctrl+C to quit):")
+			scanner.Scan()
+
+			username := scanner.Text()
+
+			fmt.Println("Enter password (Ctrl+C to quit):")
+			scanner.Scan()
+
+			password := scanner.Text()
+
+			// Send details to backend
+			login := &LoginDetails{
+				Username: username,
+				Password: password,
+			}
+
+			err := websocket.JSON.Send(ws, login)
+			if err != nil {
+				ws.Close()
+				log.Fatal("Error sending login details")
+			}
+		}
+
+		// Wait for auth loop details
+		if err := websocket.JSON.Receive(ws, &authReply); err != nil {
+
+			fmt.Println(authReply)
+			log.Fatalf("Receive error: %q", err)
+		}
+	}
+
+chat:
 	for {
 		fmt.Print("You: ")
 		if !scanner.Scan() {
-			break
+			break chat
 		}
 		text := scanner.Text()
 
 		// Send to server
 		if err := websocket.Message.Send(ws, text); err != nil {
 			log.Printf("Send error: %v", err)
-			break
+			break chat
 		}
 
 		// Receive reply -- Note blocking forever if backend crashes
 		var reply string
 		if err := websocket.Message.Receive(ws, &reply); err != nil {
 			log.Printf("Receive error: %v", err)
-			break
+			break chat
 		}
 		fmt.Println("Server:", reply)
 	}
+
 }

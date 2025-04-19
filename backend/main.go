@@ -1,17 +1,8 @@
 package main
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"log"
 	"net/http"
-	"strings"
-	"time"
-
-	"golang.org/x/net/websocket"
 )
 
 /*
@@ -32,76 +23,19 @@ import (
 */
 
 func main() {
-
-	// Create main context
-	ctx := context.Background()
-
 	// Create socket server
 	wsServer := NewServer()
 
 	// Main routing handle func
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Server side timeout for ctx
-		deadline := time.Now().Add(10 * time.Second)
-		ctx, cancel := context.WithDeadline(ctx, deadline)
-
-		// Release context resources
-		defer cancel()
-
-		// Finished request channel
-		res := make(chan ClientResponse)
-		// Spin off handler go routine
-		go parseIncomingReq(ctx, res, r)
-
-		for {
-			select {
-			case d := <-res:
-
-				if d.Err.Code == LoginSuccessful {
-					websocket.Handler(func(ws *websocket.Conn) {
-						defer func() {
-							ws.Close()
-						}()
-
-						// TODO: send in timeout context
-						wsServer.handleWS(ws, apiKey(d.Message))
-
-					}).ServeHTTP(w, r)
-					return
-				} else {
-
-					// Marshal the struct to JSON
-					jsonData, err := json.Marshal(d)
-					if err != nil {
-						log.Fatal("Error marshaling JSON:", err)
-					}
-
-					reader := bytes.NewReader(jsonData)
-					_, e := io.Copy(w, reader)
-
-					if e != nil {
-						log.Fatal("Error unmarshaling JSON:", e)
-					}
-
-					close(res)
-					return
-				}
-			case <-ctx.Done():
-				reader := strings.NewReader("Request failed!\n")
-				_, err := io.Copy(w, reader)
-
-				if err != nil {
-					http.Error(w, "Error writing response", http.StatusInternalServerError)
-					return
-				}
-				return
-			}
-		}
-
+		// Spin off new websocket connection handler
+		wsServer.start(w, r)
 	})
 
 	// Start server on PORT
 	fmt.Println("HTTP server started at http://localhost:8000")
+
+	// This  appears to be a blocking operation
 	err := http.ListenAndServe(":8000", nil)
 	if err != nil {
 		fmt.Println("Error starting server:", err)

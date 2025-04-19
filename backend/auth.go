@@ -3,10 +3,7 @@
 package main
 
 import (
-	"context"
 	"encoding/base64"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 )
@@ -18,75 +15,78 @@ type LoginDetails struct {
 	Password string `json:"password"`
 }
 
-func authenticationCycle(ctx context.Context, res chan<- ClientResponse, r *http.Request) bool {
+type MessageCode int
+
+const (
+	NewLoginDetails MessageCode = iota
+	LoginDetailsRequired
+	IncorrectLogin
+	AuthenticationError
+	AuthenticationRequired
+	LoginSuccessful
+	Welcome
+	APIKey
+	RequestTimeout
+	FailedMessageSend
+	ConnectionError
+)
+
+func getApiKey(r *http.Request) (apiKey, *RequestError) {
 	keyRaw := r.Header.Get("Authorization")
 
 	// User must send Auth header with API key
 	k, err := checkAuthValid(keyRaw)
 	if err != nil {
-		res <- ClientResponse{
-			Err:     err,
-			Message: "An error occured",
-		}
+		return "", err
+	}
+
+	return k, nil
+}
+
+func doesUserExist(k apiKey) bool {
+
+	_, ok := UserMap[k]
+
+	// Add new user details to UserMap
+	if !ok {
+		clientData := generateNewUser(k)
+		UserMap[k] = clientData
 		return false
+	}
+	return true
+}
+
+func authenticationCycle(k apiKey, l *LoginDetails) (*AuthResponse, error) {
+
+	// Check if there are login details
+	if l.Password == "" || l.Username == "" {
+		return &AuthResponse{
+			Message: "Login details required",
+			Code:    LoginDetailsRequired,
+		}, nil
 	}
 
 	// Check if user has login details
 	if haveLogin := userHaveLogin(k); !haveLogin {
-		// Log user in with new details
-		loginDetails, err := decodeLoginDetails(ctx, r)
-		if err != nil {
-			res <- ClientResponse{
-				Err: &RequestError{
-					Message: "New Login required",
-					Code:    NewLoginRequired,
-				},
-				Message: "New Login Required",
-			}
-			return false
-		}
-
-		// Set new login details
-		UserMap[k].SetNewLogin(loginDetails, k)
+		// Set new login details on client
+		UserMap[k].SetNewLogin(l, k)
 	}
 
 	// Check for logged in user
 	if loggedIn := checkUserLoggedIn(k); !loggedIn {
-		// Log user in with new details
-		loginDetails, err := decodeLoginDetails(ctx, r)
-		if err != nil {
-			res <- ClientResponse{
-				Err: &RequestError{
-					Message: "Login required",
-					Code:    LoginRequired,
-				},
-				Message: "Login Required",
-			}
-			return false
-		}
-
 		// Attempt login
-		if !loginUser(loginDetails, k) {
-			res <- ClientResponse{
-				Err: &RequestError{
-					Message: "Login details incorrect",
-					Code:    LoginDetailsIncorrect,
-				},
+		if !loginUser(l, k) {
+			return &AuthResponse{
 				Message: "Login details incorrect",
-			}
-			return false
+				Code:    IncorrectLogin,
+			}, nil
 		}
 	}
 
-	res <- ClientResponse{
-		Err: &RequestError{
-			Message: "Login successful, upgrade to websocket",
-			Code:    LoginSuccessful,
-		},
-		Message: string(k),
-	}
-
-	return true
+	return &AuthResponse{
+		Message: "Login successful",
+		Code:    LoginSuccessful,
+	}, nil
 }
 
 func checkAuthValid(baseKey string) (apiKey, *RequestError) {
@@ -136,8 +136,6 @@ func userHaveLogin(k apiKey) bool {
 
 	c := UserMap[k]
 
-	fmt.Println(k)
-
 	// No username means detail required
 	if c.loginDetails.Username == "" {
 		return false
@@ -151,23 +149,6 @@ func checkUserLoggedIn(k apiKey) bool {
 	// Check user is logged in on the map
 	c := UserMap[k]
 	return c.loggedIn
-}
-
-func decodeLoginDetails(ctx context.Context, r *http.Request) (*LoginDetails, *RequestError) {
-	var loginDetails LoginDetails
-
-	// Does user have login details
-	err := json.NewDecoder(r.Body).Decode(&loginDetails)
-	if err != nil {
-		// Prompt for new user login
-		e := &RequestError{
-			Message: "New login details required",
-			Code:    NewLoginRequired,
-		}
-		return nil, e
-	}
-
-	return &loginDetails, nil
 }
 
 func loginUser(l *LoginDetails, k apiKey) bool {
