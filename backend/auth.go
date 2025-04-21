@@ -15,22 +15,6 @@ type LoginDetails struct {
 	Password string `json:"password"`
 }
 
-type MessageCode int
-
-const (
-	NewLoginDetails MessageCode = iota
-	LoginDetailsRequired
-	IncorrectLogin
-	AuthenticationError
-	AuthenticationRequired
-	LoginSuccessful
-	Welcome
-	APIKey
-	RequestTimeout
-	FailedMessageSend
-	ConnectionError
-)
-
 func getApiKey(r *http.Request) (apiKey, *RequestError) {
 	keyRaw := r.Header.Get("Authorization")
 
@@ -46,18 +30,12 @@ func getApiKey(r *http.Request) (apiKey, *RequestError) {
 func doesUserExist(k apiKey) bool {
 
 	_, ok := UserMap[k]
-
-	// Add new user details to UserMap
-	if !ok {
-		clientData := generateNewUser(k)
-		UserMap[k] = clientData
-		return false
-	}
-	return true
+	return ok
 }
 
-func authenticationCycle(k apiKey, l *LoginDetails) (*AuthResponse, error) {
+func authenticationCycle(k apiKey, l *LoginDetails) (*AuthResponse, *RequestError) {
 
+	var err *RequestError
 	// Check if there are login details
 	if l.Password == "" || l.Username == "" {
 		return &AuthResponse{
@@ -69,7 +47,11 @@ func authenticationCycle(k apiKey, l *LoginDetails) (*AuthResponse, error) {
 	// Check if user has login details
 	if haveLogin := userHaveLogin(k); !haveLogin {
 		// Set new login details on client
-		UserMap[k].SetNewLogin(l, k)
+		err = UserMap[k].SetNewLogin(l, k)
+
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Check for logged in user

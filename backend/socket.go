@@ -74,7 +74,23 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Check if api key exists
-		doesUserExist(k)
+		if !doesUserExist(k) {
+			// Add new user details to UserMap
+			clientData := generateNewUser(k)
+
+			// Save to database
+			err := dbConn.CreateNewUser(clientData)
+
+			// TODO: Parse db error messages
+			if err != nil {
+				websocket.JSON.Send(ws, &RequestError{
+					Message: "Error creating new user",
+					Code:    DatabaseError,
+				})
+				return
+			}
+			UserMap[k] = clientData
+		}
 
 		// Set new client connection in server clients map
 		s.setConnection(ws, k)
@@ -103,6 +119,7 @@ func (s *Server) setConnection(ws *websocket.Conn, k apiKey) {
 // Handler multiplexed off to handl individual socket connection
 func (s *Server) handleWS(ws *websocket.Conn, k apiKey) {
 
+	var err *RequestError
 	// When loop breaks or returns, remove the connection pointer
 	defer func() {
 		s.mu.Lock()
@@ -111,11 +128,13 @@ func (s *Server) handleWS(ws *websocket.Conn, k apiKey) {
 
 		// Log user out
 		UserMap[k].Leave()
+
+		// TODO: broadcast to friends that user logged out
 	}()
 
 	// Send welcome message if not sent
 	if !UserMap[k].welcomeSent {
-		err := s.clients[k].SendOnConnection(
+		err = s.clients[k].SendOnConnection(
 			&ClientResponse{
 				Err:     nil,
 				Message: "Welcome to the server!",
@@ -127,16 +146,33 @@ func (s *Server) handleWS(ws *websocket.Conn, k apiKey) {
 		}
 
 		UserMap[k].welcomeSent = true
+
+		// Update database
+		dbErr := dbConn.UpdateClient(UserMap[k])
+		if dbErr != nil {
+			err = s.clients[k].SendOnConnection(
+				&ClientResponse{
+					Err:     nil,
+					Message: "Error saving client data!",
+					Code:    DatabaseError,
+				})
+			if err != nil {
+				// Tear down connection by returning from handler
+				return
+			}
+
+			return
+		}
 	}
 
 	// Send prompt for login details
-	authErr := s.authLoop(ws, k)
-	if authErr != nil {
+	err = s.authLoop(ws, k)
+	if err != nil {
 		s.clients[k].SendOnConnection(
 			&ClientResponse{
-				Err:     authErr,
-				Message: authErr.Message,
-				Code:    authErr.Code,
+				Err:     err,
+				Message: err.Message,
+				Code:    err.Code,
 			})
 
 		// Clean up connection with the client
@@ -150,54 +186,55 @@ func (s *Server) handleWS(ws *websocket.Conn, k apiKey) {
 // Communicate regarding authentication
 func (s *Server) authLoop(ws *websocket.Conn, k apiKey) *RequestError {
 
-	newMessage := &AuthResponse{
+	var reqErr *RequestError
+	var authResp *AuthResponse
+	var resp LoginDetails
+	var err error
+
+	authResp = &AuthResponse{
 		Code:    LoginDetailsRequired,
 		Message: "Login details required",
 	}
-	err := s.clients[k].SendOnConnection(newMessage)
-	if err != nil {
-		return &RequestError{
-			Message: "Error while logging in",
-			Code:    AuthenticationError,
-		}
+
+	// Request login details from client
+	reqErr = s.clients[k].SendOnConnection(authResp)
+	if reqErr != nil {
+		goto reqErrSend
 	}
 
 	// Send and receive auth details and responses
 	for {
-		var resp LoginDetails
-		err := websocket.JSON.Receive(ws, &resp)
-
+		err = websocket.JSON.Receive(ws, &resp)
 		if err != nil {
-			return &RequestError{
+			reqErr = &RequestError{
 				Message: "Connection error",
 				Code:    ConnectionError,
 			}
+			goto reqErrSend
 		}
 
 		// Authenticate new client
-		auth, authE := authenticationCycle(k, &resp)
+		authResp, reqErr = authenticationCycle(k, &resp)
 
-		if authE != nil {
-			return &RequestError{
-				Message: "Error while logging in",
-				Code:    AuthenticationError,
-			}
+		if reqErr != nil {
+			goto reqErrSend
 		}
 
-		if auth.Code == LoginSuccessful {
+		if authResp.Code == LoginSuccessful {
 			// Resend auth message
-			err := s.clients[k].SendOnConnection(auth)
+			err := s.clients[k].SendOnConnection(authResp)
 
 			if err != nil {
-				return &RequestError{
+				reqErr = &RequestError{
 					Message: "Connection error",
 					Code:    ConnectionError,
 				}
+				goto reqErrSend
 			}
 			return nil
 		} else {
 			// Resend auth message
-			err := s.clients[k].SendOnConnection(auth)
+			err := s.clients[k].SendOnConnection(authResp)
 
 			if err != nil {
 				return &RequestError{
@@ -205,12 +242,18 @@ func (s *Server) authLoop(ws *websocket.Conn, k apiKey) *RequestError {
 					Code:    ConnectionError,
 				}
 			}
+
+			// Listen to  user response again
+			continue
 		}
 	}
 
+reqErrSend:
+	return reqErr
 }
 
-// Read incoming messages from the clients
+// Read incoming messages from the client. Several different operations - friends find, friend request
+// and actual text sent between users.
 func (s *Server) readLoop(ws *websocket.Conn) {
 	buf := make([]byte, 1024)
 	for {

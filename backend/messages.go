@@ -2,6 +2,23 @@ package main
 
 import "fmt"
 
+type MessageCode int
+
+const (
+	NewLoginDetails MessageCode = iota
+	LoginDetailsRequired
+	IncorrectLogin
+	AuthenticationError
+	AuthenticationRequired
+	LoginSuccessful
+	Welcome
+	APIKey
+	RequestTimeout
+	FailedMessageSend
+	ConnectionError
+	DatabaseError
+)
+
 type Response interface {
 	GetMessage() string
 }

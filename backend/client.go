@@ -24,6 +24,7 @@ func (l *Users) allUsers() []string {
 
 type clientData struct {
 	message      string
+	accountMade  bool
 	welcomeSent  bool
 	loginDetails LoginDetails
 	loggedIn     bool
@@ -31,11 +32,12 @@ type clientData struct {
 	active       bool
 	err          error
 	mu           sync.Mutex
+	rwmu         sync.RWMutex
 }
 
 func (c *clientData) Read() string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.rwmu.RLock()
+	defer c.rwmu.RUnlock()
 	return fmt.Sprintf("The client's status... %q", c.message)
 }
 
@@ -54,6 +56,7 @@ func (c *clientData) LoginClient(k apiKey) {
 	defer c.mu.Unlock()
 	if !c.active {
 		c.active = true
+		c.loggedIn = true
 		c.message = fmt.Sprintf("Active since %q", time.Now())
 	}
 }
@@ -66,15 +69,43 @@ func (c *clientData) WelcomeSent() bool {
 	return c.welcomeSent
 }
 
-func (c *clientData) SetNewLogin(l *LoginDetails, k apiKey) {
+func (c *clientData) SetNewLogin(l *LoginDetails, k apiKey) *RequestError {
+
+	// Copy login details before setting on current USerMap
+	clientCopy := clientData{
+		mu:          sync.Mutex{},
+		rwmu:        sync.RWMutex{},
+		accountMade: c.accountMade,
+		message:     c.message,
+		loggedIn:    c.loggedIn,
+		apiKey:      c.apiKey,
+		active:      c.active,
+		err:         c.err,
+		loginDetails: LoginDetails{
+			Username: l.Username,
+			Password: l.Password,
+		},
+	}
+
+	// Try db operation first
+	err := dbConn.UpdateClient(&clientCopy)
+
+	if err != nil {
+		return &RequestError{
+			Message: "Failed to set new login details",
+			Code:    DatabaseError,
+		}
+	}
+
+	// Updte user amp on success
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.loginDetails.Username = l.Username
-	c.loginDetails.Password = l.Password
 
 	// Set user to logged in an active on first time
 	c.loggedIn = true
 	c.active = true
+
+	return nil
 }
 
 func generateNewUser(k apiKey) *clientData {
@@ -86,11 +117,13 @@ func generateNewUser(k apiKey) *clientData {
 			Username: "",
 			Password: "",
 		},
+		accountMade: false,
 		active:      false,
 		loggedIn:    false,
 		err:         nil,
 		welcomeSent: false,
 		mu:          sync.Mutex{},
+		rwmu:        sync.RWMutex{},
 	}
 
 }
@@ -104,10 +137,13 @@ var UserMap Users = Users{
 			Username: "hello",
 			Password: "password",
 		},
+		accountMade: true,
 		active:      true,
 		loggedIn:    true,
 		err:         nil,
 		mu:          sync.Mutex{},
+		rwmu:        sync.RWMutex{},
+
 		welcomeSent: true,
 	},
 }

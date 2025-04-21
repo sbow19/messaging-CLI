@@ -2,14 +2,16 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 )
 
 /*
 	1) Listen to new client connections - DONE
-	2) Check whether is new user based on API key provided
-	3) If new, then create credentials, API key and prompt login info
-	4) Establish new Client connection object
+	2) Check whether is new user based on API key provided - DONE
+	3) If new, then create credentials, API key and prompt login info - DONE
+	4) Establish new Client connection object - DONE
 
 	// EVENTS FROM CLIENT SIDE
 	5) Listen to messages and errors from all the client communications
@@ -23,6 +25,16 @@ import (
 */
 
 func main() {
+	// go_sqlite3 equired CGO_ENABLED
+	os.Setenv("CGO_ENABLED", "1")
+
+	// Load all user data into memory
+	err := loadDB()
+
+	if err != nil {
+		log.Fatalf("Error loading database: %q", err)
+	}
+
 	// Create socket server
 	wsServer := NewServer()
 
@@ -32,12 +44,15 @@ func main() {
 		wsServer.start(w, r)
 	})
 
+	// Get all users --> prints out to txt file
+	go dbConn.GetAllUsers()
+
 	// Start server on PORT
 	fmt.Println("HTTP server started at http://localhost:8000")
 
 	// This  appears to be a blocking operation
-	err := http.ListenAndServe(":8000", nil)
-	if err != nil {
+	listenErr := http.ListenAndServe(":8000", nil)
+	if listenErr != nil {
 		fmt.Println("Error starting server:", err)
 	}
 
