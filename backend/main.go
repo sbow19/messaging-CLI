@@ -53,7 +53,7 @@ func main() {
 	// This  appears to be a blocking operation
 	listenErr := http.ListenAndServe(":8000", nil)
 	if listenErr != nil {
-		fmt.Println("Error starting server:", err)
+		fmt.Println("Error starting server:", listenErr)
 	}
 
 }

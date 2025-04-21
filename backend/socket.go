@@ -24,6 +24,9 @@ type ClientConnection struct {
 
 func (c *ClientConnection) SendOnConnection(m Response) *RequestError {
 
+	// DEbugging with message
+	fmt.Println(m)
+
 	jsonData, err := json.Marshal(m)
 
 	if err != nil {
@@ -249,6 +252,7 @@ func (s *Server) authLoop(ws *websocket.Conn, k apiKey) *RequestError {
 	}
 
 reqErrSend:
+	fmt.Println(err)
 	return reqErr
 }
 

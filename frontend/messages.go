@@ -18,6 +18,7 @@ const (
 	IncorrectLogin
 	AuthenticationError
 	AuthenticationRequired
+	AttemptLogin
 	LoginSuccessful
 	Welcome
 	APIKey

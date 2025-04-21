@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 // ReadAPIKey reads the file and returns the API key.
@@ -34,4 +37,58 @@ func ReadAPIKey(filename string) (string, error) {
 	}
 
 	return "", fmt.Errorf("API key not found in the file")
+}
+
+type Questions []*Question
+
+type Question struct {
+	q   string             // Question to display
+	ref func(input string) // reference to property in struct
+}
+
+func PromptFlow(order *Questions, m string, input *tview.TextArea, qArea *tview.Frame) error {
+
+	//Question number
+	i := 0
+	next := make(chan struct{})
+	defer func() {
+		qArea.Clear()
+		qArea.AddText("Welcome!", true, tview.AlignCenter, tcell.ColorWhite)
+
+		// Reset input behaviour
+		input.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+			return event
+		})
+		close(next)
+	}()
+	for i < len(*order) {
+
+		question := (*order)[i]
+		qArea.AddText(m, true, tview.AlignCenter, tcell.ColorWhite)
+		qArea.AddText(question.q, true, tview.AlignCenter, tcell.ColorWhite)
+
+		input.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+			// Send input to next stage
+			if event.Key() == tcell.KeyEnter {
+
+				//Assign input to data structure
+				question.ref(input.GetText())
+
+				qArea.Clear()
+				input.SetText("", false)
+
+				// Go to next question
+				i++
+				next <- struct{}{}
+				return nil
+			} else {
+				return event
+			}
+		})
+
+		<-next
+
+	}
+
+	return nil
 }

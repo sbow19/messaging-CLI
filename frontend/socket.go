@@ -16,6 +16,12 @@ type conn struct {
 	// Message from the server
 	messages chan Response
 
+	// Receive messages intended for networking part of the app. Subscribe to network slice
+	RecNetMess chan *AppMessage
+
+	// Send messages on UI broadcast channel
+	UIBroadcast chan *AppMessage
+
 	// Error
 	err chan error
 
@@ -23,16 +29,18 @@ type conn struct {
 	done chan struct{}
 }
 
-func NewConnection(ws *websocket.Conn) *conn {
+func NewConnection(ws *websocket.Conn, c chan *AppMessage) *conn {
 	return &conn{
-		ws:       ws,
-		messages: make(chan Response),
-		done:     make(chan struct{}),
+		ws:          ws,
+		RecNetMess:  make(chan *AppMessage),
+		UIBroadcast: c,
+		messages:    make(chan Response),
+		done:        make(chan struct{}),
 	}
 }
 
 // Establish connection with backend and create message channel
-func dialBackend() error {
+func dialBackend(state *appState) error {
 	// Prepare a custom WebSocket config
 	origin := "ws://localhost:8000/"
 	config, err := websocket.NewConfig(origin, "http://localhost/")
@@ -76,50 +84,69 @@ func dialBackend() error {
 	}
 
 	// Assign connection to my conn struct
-	myconn := NewConnection(conn)
+	myconn := NewConnection(conn, state.UIBroadcast)
 
-	go myconn.backendListener()
+	// Subscribe to UI Messages
+	state.SubscribeChannel(myconn.RecNetMess, Network)
+
+	// Listen to messages from network or app
+	myconn.listen()
 
 	return nil
 }
 
-func (c *conn) listen() {
+func (c *conn) listenSocket() {
+
 	for {
-		// Receive in responses from backend
-		if e := websocket.JSON.Receive(c.ws, c.messages); e != nil {
+		// Receive in Response from backend, then send on
+		data := &ClientResponse{
+			Message: "Whats up",
+		}
+		if e := websocket.JSON.Receive(c.ws, data); e != nil {
 			c.done <- struct{}{}
+			// Close channels on connection object until reestablished
+			close(c.messages)
+			close(c.done)
 			break
 		}
+		c.messages <- data
+
 	}
 }
 
 // Listen for messages from the backend and listen accordingly on goroutine
-func (c *conn) backendListener() error {
+func (c *conn) listen() error {
 	defer c.ws.Close()
 
-	go c.listen()
+	// Listen to websocket messages
+	go c.listenSocket()
 
 	// Keep readloop active while listening for backend calls
 readLoop:
 	for {
-
 		select {
+		//Wait for messages from network, and send to UI
 		case response := <-c.messages:
 
-			// Determine operation based on message received
 			switch response.GetCode() {
-			case LoginDetailsRequired, NewLoginDetails:
-				// Prompt login details
-				promptLoginDetails(ui)
-				break
-			case LoginSuccessful:
-				break
+			case LoginDetailsRequired:
+				// Login details required
+				c.UIBroadcast <- &AppMessage{
+					Code:    LoginDetailsRequired,
+					Message: "Please login",
+				}
 			case IncorrectLogin:
-				// Incorrect details
-				break
-			case Welcome:
-				// Display welcome data in mini-message center, terminal input
-				break
+				// Login details required
+				c.UIBroadcast <- &AppMessage{
+					Code:    LoginDetailsRequired,
+					Message: "Error: login details incorrect",
+				}
+			}
+
+		// Receive message intended for networking part of app
+		case message := <-c.RecNetMess:
+
+			switch message.Code {
 
 			}
 
