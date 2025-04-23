@@ -46,9 +46,9 @@ type Question struct {
 	ref func(input string) // reference to property in struct
 }
 
-func PromptFlow(order *Questions, m string, input *tview.TextArea, qArea *tview.Frame) error {
+func PromptFlow(order *Questions, m string, input *tview.TextArea, output chan *AppMessage, qArea *tview.Frame, content interface{}) error {
 
-	//Question number
+	//Question numbers
 	i := 0
 	next := make(chan struct{})
 	defer func() {
@@ -89,6 +89,16 @@ func PromptFlow(order *Questions, m string, input *tview.TextArea, qArea *tview.
 		<-next
 
 	}
+
+	aMess := AppMessage{
+		Message: "Login details",
+		Payload: nil,
+		Code:    AttemptLogin,
+	}
+	aMess.EncodePayload(content)
+
+	// Broadcast message to network part of app
+	output <- &aMess
 
 	return nil
 }

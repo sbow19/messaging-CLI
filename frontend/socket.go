@@ -34,6 +34,7 @@ func NewConnection(ws *websocket.Conn, c chan *AppMessage) *conn {
 		ws:          ws,
 		RecNetMess:  make(chan *AppMessage),
 		UIBroadcast: c,
+		err:         make(chan error),
 		messages:    make(chan Response),
 		done:        make(chan struct{}),
 	}
@@ -80,7 +81,15 @@ func dialBackend(state *appState) error {
 	// Set up initial handshake with server
 	conn, err := websocket.DialConfig(config)
 	if err != nil {
-		log.Fatalf("WebSocket upgrade failed: %v", err)
+		// Send UI message
+		aMess := AppMessage{
+			Code:    ConnectionError,
+			Message: "Error connecting to server",
+			Payload: nil,
+		}
+		state.UIBroadcast <- &aMess
+
+		return err
 	}
 
 	// Assign connection to my conn struct
@@ -99,10 +108,9 @@ func (c *conn) listenSocket() {
 
 	for {
 		// Receive in Response from backend, then send on
-		data := &ClientResponse{
-			Message: "Whats up",
-		}
+		data := &ClientResponse{}
 		if e := websocket.JSON.Receive(c.ws, data); e != nil {
+			// If  socket is closed and finish message sent from backend,trigger connection error
 			c.done <- struct{}{}
 			// Close channels on connection object until reestablished
 			close(c.messages)
@@ -148,9 +156,23 @@ readLoop:
 
 			switch message.Code {
 
+			case AttemptLogin:
+				// Message
+				clientMess := ClientMessage{
+					Code:    message.Code,
+					Payload: message.Payload,
+				}
+				// Send message
+				c.SendMessage(&clientMess)
 			}
 
 		case <-c.done:
+			// Broadcast Connection error
+			aMess := AppMessage{
+				Code:    ConnectionError,
+				Message: "Error connecting with server.",
+			}
+			c.UIBroadcast <- &aMess
 			break readLoop
 		}
 	}
@@ -159,8 +181,9 @@ readLoop:
 
 // Send message to the backend
 func (c *conn) SendMessage(m *ClientMessage) {
+
 	// Receive in responses from backend
 	if e := websocket.JSON.Send(c.ws, m); e != nil {
-		c.err <- e
+		c.done <- struct{}{}
 	}
 }

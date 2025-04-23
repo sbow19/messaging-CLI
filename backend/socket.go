@@ -25,7 +25,7 @@ type ClientConnection struct {
 func (c *ClientConnection) SendOnConnection(m Response) *RequestError {
 
 	// DEbugging with message
-	fmt.Println(m)
+	// fmt.Println(m)
 
 	jsonData, err := json.Marshal(m)
 
@@ -191,7 +191,8 @@ func (s *Server) authLoop(ws *websocket.Conn, k apiKey) *RequestError {
 
 	var reqErr *RequestError
 	var authResp *AuthResponse
-	var resp LoginDetails
+	var resp ClientMessage
+	var loginDetails LoginDetails
 	var err error
 
 	authResp = &AuthResponse{
@@ -216,8 +217,20 @@ func (s *Server) authLoop(ws *websocket.Conn, k apiKey) *RequestError {
 			goto reqErrSend
 		}
 
+		// Continue with auth loop. Client cannot send any other type of message
+		if resp.Code != AttemptLogin {
+			continue
+		}
+
+		// Get login details from payload
+		err := json.Unmarshal(resp.Payload, &loginDetails)
+
+		if err != nil {
+			fmt.Println(err)
+		}
+
 		// Authenticate new client
-		authResp, reqErr = authenticationCycle(k, &resp)
+		authResp, reqErr = authenticationCycle(k, &loginDetails)
 
 		if reqErr != nil {
 			goto reqErrSend
@@ -262,6 +275,7 @@ func (s *Server) readLoop(ws *websocket.Conn) {
 	buf := make([]byte, 1024)
 	for {
 		n, err := ws.Read(buf)
+
 		if err != nil {
 
 			if err == io.EOF {

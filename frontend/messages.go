@@ -1,8 +1,8 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
-	"io"
 )
 
 type Response interface {
@@ -26,6 +26,8 @@ const (
 	FailedMessageSend
 	ConnectionError
 	DatabaseError
+	Home
+	GameStart
 )
 
 type AuthResponse struct {
@@ -55,12 +57,55 @@ func (c ClientResponse) GetCode() MessageCode {
 
 // Client messages have a different type and interface
 type ClientMessage struct {
-	Payload io.Reader
-	Code    ClientCode
+	Payload json.RawMessage `json:"payload"`
+	Code    MessageCode     `json:"code"`
 }
 
-type ClientCode int
+// Encode and decode payloads depending on the code type
+func (m *ClientMessage) EncodePayload(p interface{}) error {
 
-const (
-	Login ClientCode = iota
-)
+	switch m.Code {
+	case AttemptLogin:
+		// P is LoginDetails type
+		if result, ok := p.(*LoginDetails); ok {
+
+			jsonData, err := json.Marshal(result)
+
+			if err != nil {
+				return err
+			}
+
+			m.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+
+	}
+
+	return nil
+
+}
+
+// Pass in expected type and unmarshal into that type
+func (m *ClientMessage) DecodePayload(target interface{}) error {
+
+	switch m.Code {
+	case AttemptLogin:
+		// P is LoginDetails type
+		if _, ok := target.(*LoginDetails); ok {
+
+			err := json.Unmarshal(m.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+
+	}
+
+	return nil
+}
