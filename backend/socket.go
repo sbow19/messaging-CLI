@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sync"
 
@@ -272,9 +273,10 @@ reqErrSend:
 // Read incoming messages from the client. Several different operations - friends find, friend request
 // and actual text sent between users.
 func (s *Server) readLoop(ws *websocket.Conn) {
-	buf := make([]byte, 1024)
+
+	var clientMessage ClientMessage
 	for {
-		n, err := ws.Read(buf)
+		err := websocket.JSON.Receive(ws, &clientMessage)
 
 		if err != nil {
 
@@ -285,10 +287,43 @@ func (s *Server) readLoop(ws *websocket.Conn) {
 			fmt.Println("Read error: ", err)
 			continue
 		}
-		msg := buf[:n]
-		fmt.Println(string(msg))
 
-		ws.Write(buf)
+		switch clientMessage.Code {
+
+		case SearchUsers:
+			// Attempt to search database for users
+			var srch string
+			var err error
+			var results *UsersSearch
+
+			clientMessage.DecodePayload(&srch)
+			results, err = UserSearchResults(srch)
+
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			clientResponse := ClientResponse{
+				Code:    SearchUsersResults,
+				Payload: nil,
+				Err:     nil,
+				Message: fmt.Sprintf("There were %d results", len(*results)),
+			}
+			clientResponse.EncodePayload(results)
+
+			err = websocket.JSON.Send(ws, &clientResponse)
+
+			if err != nil {
+				log.Fatal(err)
+			}
+
+		}
 
 	}
+}
+
+func UserSearchResults(s string) (*UsersSearch, error) {
+	//Search db for users
+	return dbConn.GetUsers(s)
+
 }

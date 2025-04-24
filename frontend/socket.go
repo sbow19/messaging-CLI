@@ -41,7 +41,7 @@ func NewConnection(ws *websocket.Conn, c chan *AppMessage) *conn {
 }
 
 // Establish connection with backend and create message channel
-func dialBackend(state *appState) error {
+func dialBackend(state *appState) {
 	// Prepare a custom WebSocket config
 	origin := "ws://localhost:8000/"
 	config, err := websocket.NewConfig(origin, "http://localhost/")
@@ -88,8 +88,8 @@ func dialBackend(state *appState) error {
 			Payload: nil,
 		}
 		state.UIBroadcast <- &aMess
+		return
 
-		return err
 	}
 
 	// Assign connection to my conn struct
@@ -99,9 +99,8 @@ func dialBackend(state *appState) error {
 	state.SubscribeChannel(myconn.RecNetMess, Network)
 
 	// Listen to messages from network or app
-	myconn.listen()
+	myconn.listen(state)
 
-	return nil
 }
 
 func (c *conn) listenSocket() {
@@ -123,7 +122,7 @@ func (c *conn) listenSocket() {
 }
 
 // Listen for messages from the backend and listen accordingly on goroutine
-func (c *conn) listen() error {
+func (c *conn) listen(state *appState) error {
 	defer c.ws.Close()
 
 	// Listen to websocket messages
@@ -149,6 +148,23 @@ readLoop:
 					Code:    LoginDetailsRequired,
 					Message: "Error: login details incorrect",
 				}
+			case LoginSuccessful:
+				state.SetLoggedIn()
+				// Welcome user
+				c.UIBroadcast <- &AppMessage{
+					Code:    LoginSuccessful,
+					Message: "You are logged in",
+				}
+			case SearchUsersResults:
+				// Welcome user
+
+				c.UIBroadcast <- &AppMessage{
+					Code:    SearchUsersResults,
+					Message: "Results",
+					Payload: response.GetPayload(),
+				}
+			default:
+
 			}
 
 		// Receive message intended for networking part of app
@@ -164,13 +180,21 @@ readLoop:
 				}
 				// Send message
 				c.SendMessage(&clientMess)
+			case SearchUsers:
+				// Message
+				clientMess := ClientMessage{
+					Code:    message.Code,
+					Payload: message.Payload,
+				}
+				// Send message
+				c.SendMessage(&clientMess)
 			}
 
 		case <-c.done:
 			// Broadcast Connection error
 			aMess := AppMessage{
 				Code:    ConnectionError,
-				Message: "Error connecting with server.",
+				Message: "Lost connection to server",
 			}
 			c.UIBroadcast <- &aMess
 			break readLoop

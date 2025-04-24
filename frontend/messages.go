@@ -8,6 +8,9 @@ import (
 type Response interface {
 	GetMessage() string
 	GetCode() MessageCode
+	EncodePayload(p interface{}) error
+	DecodePayload(target interface{}) error
+	GetPayload() json.RawMessage
 }
 
 type MessageCode int
@@ -28,6 +31,8 @@ const (
 	DatabaseError
 	Home
 	GameStart
+	SearchUsers
+	SearchUsersResults
 )
 
 type AuthResponse struct {
@@ -43,9 +48,10 @@ func (a AuthResponse) GetCode() MessageCode {
 }
 
 type ClientResponse struct {
-	Err     *RequestError `json:"error"`
-	Message string        `json:"message"`
-	Code    MessageCode   `json:"code"`
+	Err     *RequestError   `json:"error"`
+	Message string          `json:"message"`
+	Code    MessageCode     `json:"code"`
+	Payload json.RawMessage `json:"payload"`
 }
 
 func (c ClientResponse) GetMessage() string {
@@ -53,6 +59,58 @@ func (c ClientResponse) GetMessage() string {
 }
 func (c ClientResponse) GetCode() MessageCode {
 	return c.Code
+}
+func (c ClientResponse) GetPayload() json.RawMessage {
+	return c.Payload
+}
+
+type UsersSearch []string
+
+// Encode and decode payloads depending on the code type
+func (m *ClientResponse) EncodePayload(p interface{}) error {
+
+	switch m.Code {
+	case SearchUsersResults:
+		// P is LoginDetails type
+		if result, ok := p.(*UsersSearch); ok {
+
+			jsonData, err := json.Marshal(result)
+
+			if err != nil {
+				return err
+			}
+
+			m.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	}
+
+	return nil
+
+}
+
+// Pass in expected type and unmarshal into that type
+func (m *ClientResponse) DecodePayload(target interface{}) error {
+
+	switch m.Code {
+	case SearchUsersResults:
+		// P is LoginDetails type
+		if _, ok := target.(*UsersSearch); ok {
+
+			err := json.Unmarshal(m.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	}
+
+	return nil
 }
 
 // Client messages have a different type and interface
@@ -108,4 +166,8 @@ func (m *ClientMessage) DecodePayload(target interface{}) error {
 	}
 
 	return nil
+}
+
+func (c ClientMessage) GetPayload() json.RawMessage {
+	return c.Payload
 }

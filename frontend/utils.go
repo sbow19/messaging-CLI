@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -46,14 +47,13 @@ type Question struct {
 	ref func(input string) // reference to property in struct
 }
 
-func PromptFlow(order *Questions, m string, input *tview.TextArea, output chan *AppMessage, qArea *tview.Frame, content interface{}) error {
+func PromptFlow(ctx context.Context, code MessageCode, order *Questions, m string, input *tview.TextArea, output chan *AppMessage, qArea *tview.Frame, content interface{}) error {
 
 	//Question numbers
 	i := 0
 	next := make(chan struct{})
 	defer func() {
 		qArea.Clear()
-		qArea.AddText("Welcome!", true, tview.AlignCenter, tcell.ColorWhite)
 
 		// Reset input behaviour
 		input.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -64,7 +64,6 @@ func PromptFlow(order *Questions, m string, input *tview.TextArea, output chan *
 	for i < len(*order) {
 
 		question := (*order)[i]
-		qArea.AddText(m, true, tview.AlignCenter, tcell.ColorWhite)
 		qArea.AddText(question.q, true, tview.AlignCenter, tcell.ColorWhite)
 
 		input.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -86,16 +85,46 @@ func PromptFlow(order *Questions, m string, input *tview.TextArea, output chan *
 			}
 		})
 
-		<-next
+	trash:
+		for {
+			select {
+			case <-next:
+				break trash
+				// Do nothing
+			case <-ctx.Done():
+				return nil
+			}
+		}
 
 	}
 
-	aMess := AppMessage{
-		Message: "Login details",
-		Payload: nil,
-		Code:    AttemptLogin,
+	var aMess AppMessage
+	switch code {
+	case LoginDetailsRequired:
+		aMess = AppMessage{
+			Message: "Login details",
+			Payload: nil,
+			Code:    AttemptLogin,
+		}
+
+	case SearchUsers:
+		aMess = AppMessage{
+			Message: "Search users",
+			Payload: nil,
+			Code:    SearchUsers,
+		}
+
 	}
+
 	aMess.EncodePayload(content)
+
+	// Short circuit if contxt cancelled
+	select {
+	case <-ctx.Done():
+		return nil
+	default:
+		// Do nothing
+	}
 
 	// Broadcast message to network part of app
 	output <- &aMess

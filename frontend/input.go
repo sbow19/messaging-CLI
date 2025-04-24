@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 
 	"github.com/rivo/tview"
@@ -50,6 +51,10 @@ func InputBar(s *appState) IOPrimitive {
 		log.Fatal(err)
 	}
 
+	var (
+		cancelPrompt context.CancelFunc
+	)
+
 	// Listen to UI broadcasts
 	go func() {
 		for {
@@ -59,6 +64,14 @@ func InputBar(s *appState) IOPrimitive {
 				switch m.Code {
 				// Prompt login details
 				case LoginDetailsRequired:
+					// Cancel any previous prompt
+					if cancelPrompt != nil {
+						cancelPrompt()
+					}
+
+					// Create a new context for this message
+					var ctx context.Context
+					ctx, cancelPrompt = context.WithCancel(context.Background())
 
 					loginDetails := LoginDetails{
 						Username: "",
@@ -67,25 +80,50 @@ func InputBar(s *appState) IOPrimitive {
 
 					questions := Questions{
 						&Question{
-							q: "Please type username",
+							q: "Please type your username",
 							ref: func(input string) {
 								loginDetails.Username = input
 							},
 						},
 						&Question{
-							q: "Please type password",
+							q: "Please type your password",
 							ref: func(input string) {
 								loginDetails.Password = input
 							},
 						},
 					}
-					go PromptFlow(&questions, m.Message, textarea, input.NetworkMessage, input.prim, &loginDetails)
+					go PromptFlow(ctx, m.Code, &questions, m.Message, textarea, input.NetworkMessage, input.prim, &loginDetails)
+				case SearchUsers, SearchUsersResults:
+					if !s.loggedIn {
+						continue
+					}
+					// Cancel any previous prompt
+					if cancelPrompt != nil {
+						cancelPrompt()
+					}
 
+					// Create a new context for this message
+					var ctx context.Context
+					ctx, cancelPrompt = context.WithCancel(context.Background())
+					user := ""
+
+					questions := Questions{
+						&Question{
+							q: "Please type a username",
+							ref: func(input string) {
+								user = input
+							},
+						},
+					}
+					go PromptFlow(ctx, m.Code, &questions, m.Message, textarea, input.NetworkMessage, input.prim, &user)
 				default:
 					/*Do Nothing*/
 				}
 
 			case <-input.done:
+				if cancelPrompt != nil {
+					cancelPrompt()
+				}
 				break
 			}
 		}

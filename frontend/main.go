@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/rivo/tview"
 )
@@ -37,6 +38,36 @@ func (a *AppMessage) EncodePayload(p interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
+	case SearchUsers:
+		// P is LoginDetails type
+		if result, ok := p.(*string); ok {
+
+			jsonData, err := json.Marshal(*result)
+
+			if err != nil {
+				return err
+			}
+
+			a.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case SearchUsersResults:
+		// P is LoginDetails type
+		if result, ok := p.(*UsersSearch); ok {
+
+			jsonData, err := json.Marshal(result)
+
+			if err != nil {
+				return err
+			}
+
+			a.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
 
 	}
 
@@ -51,6 +82,32 @@ func (a *AppMessage) DecodePayload(target interface{}) error {
 	case AttemptLogin:
 		// P is LoginDetails type
 		if _, ok := target.(*LoginDetails); ok {
+
+			err := json.Unmarshal(a.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case SearchUsers:
+		// P is LoginDetails type
+		if _, ok := target.(string); ok {
+
+			err := json.Unmarshal(a.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case SearchUsersResults:
+		// P is LoginDetails type
+		if _, ok := target.(*UsersSearch); ok {
 
 			err := json.Unmarshal(a.Payload, target)
 
@@ -184,8 +241,17 @@ func main() {
 
 	// Mnage intra-app messages
 	go messageBroker(myAppState)
-	// Set up networking
-	go dialBackend(myAppState)
+	// Set up networking -->
+	// Connect ticker
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	go func() {
+		for range ticker.C {
+			// Blocks until it returns, then retry takes place
+			dialBackend(myAppState)
+		}
+	}()
 	// Set up UI. Receive channels. Gene
 	flex := getUI(myAppState)
 

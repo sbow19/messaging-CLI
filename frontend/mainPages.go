@@ -57,10 +57,61 @@ func NewMessageBox(s *appState) IOPrimitive {
 				case GameStart:
 					messageBox.SetText("")
 					messageBox.SetText(m.Message)
+				case SearchUsers:
+					messageBox.SetText("")
+					messageBox.SetText(m.Message)
+				default:
+					//Do nothing
+				}
+
+			case <-box.done:
+				break
+			}
+		}
+
+	}()
+
+	return &box
+
+}
+
+func NewNetworkBox(s *appState) IOPrimitive {
+
+	uiCh := UIChannels{
+		RecUIMess:      make(chan *AppMessage, 3),
+		NetworkMessage: s.networkBroadcast,
+		done:           make(chan struct{}),
+	}
+
+	messageBox := tview.NewTextView()
+
+	box := MessageBoxPrimitive{
+		prim:       messageBox,
+		UIChannels: uiCh,
+	}
+
+	// Register primitive with UI broadcast handler
+	err := s.SubscribeChannel(box.RecUIMess, UI)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Listen to UI broadcasts
+	go func() {
+
+		for {
+			select {
+			case m := <-box.RecUIMess:
+				switch m.Code {
+				// Some error with connection
 				case ConnectionError:
 					messageBox.SetText("")
 					messageBox.SetText(m.Message)
 				case LoginDetailsRequired:
+					messageBox.SetText("")
+					messageBox.SetText(m.Message)
+				case LoginSuccessful:
 					messageBox.SetText("")
 					messageBox.SetText(m.Message)
 				default:
@@ -104,14 +155,9 @@ func NewAboutPage() *tview.TextView {
 	return text
 }
 
-func FriendsScreen() *tview.Pages {
-	pages := tview.NewPages()
-	return pages
-}
-
 type MainScreenPrimitive struct {
 	// Reference to underlying primitive
-	prim *tview.Pages
+	prim *tview.Flex
 	UIChannels
 }
 
@@ -145,15 +191,20 @@ func MainScreenPages(s *appState) IOPrimitive {
 	list.SetBorder(true)
 
 	messageBox := NewMessageBox(s)
+	networkBox := NewNetworkBox(s)
 
 	frontFlex := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(
-			list,
+			pages,
 			0,
 			15,
 			false,
 		).AddItem(
+		networkBox.GetPrim(),
+		1,
+		1,
+		false).AddItem(
 		messageBox.GetPrim(),
 		1,
 		1,
@@ -174,22 +225,25 @@ func MainScreenPages(s *appState) IOPrimitive {
 	games := NewGamesView(s)
 
 	// Friends page - implements Search for new friends
-	friends := FriendsScreen()
-	friends.SetBorder(true)
+	friends := FriendsPages(s)
 
 	// Configuring pages behavior
-	pages.AddPage("Home", frontFlex, true, true)
+	pages.AddPage("Home", list, true, true)
 	pages.AddPage("Games", games.GetPrim(), true, false)
 	pages.AddPage("About", text, true, false)
-	pages.AddPage("Friends", friends, true, false)
+	pages.AddPage("Friends", friends.GetPrim(), true, false)
 
 	pages.SetBorder(false)
 	pages.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		name := event.Name()
 		switch name {
 		case "Home", "Esc":
-			pages.SwitchToPage("Home")
-			return nil
+
+			//Only Returns in top level parts of the app and games
+			if !games.GetPrim().HasFocus() && !friends.GetPrim().HasFocus() {
+				pages.SwitchToPage("Home")
+			}
+			return event
 		}
 		return event
 	})
@@ -202,7 +256,7 @@ func MainScreenPages(s *appState) IOPrimitive {
 	}
 
 	mainPages := MainScreenPrimitive{
-		prim:       pages,
+		prim:       frontFlex,
 		UIChannels: uiCh,
 	}
 

@@ -17,21 +17,3 @@ func generateAPIKey() (string, error) {
 	}
 	return hex.EncodeToString(bytes), nil
 }
-
-// Main user prompt area in home screen
-func promptLoginDetails() (*LoginDetails, error) {
-	// screen.Write([]byte("Enter username\n"))
-	// username := screen.ReadInput()
-
-	// screen.Write([]byte("Enter password\n"))
-	// password := screen.ReadInput()
-
-	// login := &LoginDetails{
-	// 	Username: string(username),
-	// 	Password: string(password),
-	// }
-
-	// return login, nil
-	return nil, nil
-
-}

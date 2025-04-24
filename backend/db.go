@@ -265,6 +265,52 @@ retErr:
 	}
 }
 
+type UsersSearch []string
+
+func (c *DBConn) GetUsers(s string) (*UsersSearch, error) {
+	fmt.Println(s)
+	var err error
+	var rows *sql.Rows
+	var stmt *sql.Stmt
+
+	outputUsers := UsersSearch{}
+
+	// Query db
+	stmt, err = c.db.Prepare(
+		`
+		SELECT username FROM messages
+		WHERE username LIKE ?
+		;
+		`,
+	)
+	if err != nil {
+		goto retErr
+	}
+	defer stmt.Close()
+
+	rows, err = stmt.Query(s + "%")
+	if err != nil {
+		goto retErr
+	}
+	defer rows.Close()
+
+	// Data to write into output text file
+	for rows.Next() {
+
+		var username string
+		if err := rows.Scan(&username); err != nil {
+			goto retErr
+		}
+		outputUsers = append(outputUsers, username)
+	}
+	return &outputUsers, nil
+
+retErr:
+	{
+		return nil, err
+	}
+}
+
 func (c *DBConn) Close() error {
 	err := c.db.Close()
 

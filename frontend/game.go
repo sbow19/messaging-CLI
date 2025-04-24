@@ -30,8 +30,6 @@ func NewGamesView(s *appState) IOPrimitive {
 
 	gamePages := tview.NewPages()
 
-	messageBox := NewMessageBox(s)
-
 	frontFlex := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(
@@ -39,12 +37,7 @@ func NewGamesView(s *appState) IOPrimitive {
 			0,
 			15,
 			false,
-		).AddItem(
-		messageBox.GetPrim(),
-		1,
-		1,
-		false,
-	)
+		)
 
 	frontFlex.SetBorderPadding(0, 0, 0, 0)
 
@@ -71,8 +64,8 @@ func NewGamesView(s *appState) IOPrimitive {
 			}
 
 		}).
-		AddItem("Ball", "", 'b', func() {
-			gamePages.SwitchToPage("Ball")
+		AddItem("Invaders from Space", "", 'b', func() {
+			gamePages.SwitchToPage("Space")
 		}).
 		AddItem("Tic-Tac-Toe", "", 't', func() {
 			gamePages.SwitchToPage("Tic")
@@ -98,6 +91,20 @@ func NewGamesView(s *appState) IOPrimitive {
 	//
 	gamePages.AddPage("List", list, true, true)
 	gamePages.AddPage("Snake", snake, true, false)
+	gamePages.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		name := event.Name()
+		switch name {
+		case "Home", "Esc":
+			gamePages.SwitchToPage("List")
+			games.UIMessage <- &AppMessage{
+				Code:    GameStart,
+				Payload: nil,
+				Message: "",
+			}
+			return nil
+		}
+		return event
+	})
 
 	// Register primitive with UI broadcast handler
 	err := s.SubscribeChannel(games.RecUIMess, UI)
@@ -399,6 +406,16 @@ func NewSnakeScreen(state *appState) *tview.Table {
 				}
 			}
 			return event
+		})
+
+		table.SetBlurFunc(func() {
+			start = false
+
+			state.UIBroadcast <- &AppMessage{
+				Code:    GameStart,
+				Payload: nil,
+				Message: "",
+			}
 		})
 
 		// Constantly running until leave screen
