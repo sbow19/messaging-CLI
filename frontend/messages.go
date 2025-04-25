@@ -23,6 +23,7 @@ const (
 	AuthenticationRequired
 	AttemptLogin
 	LoginSuccessful
+	AllContent
 	Welcome
 	APIKey
 	RequestTimeout
@@ -33,6 +34,11 @@ const (
 	GameStart
 	SearchUsers
 	SearchUsersResults
+	FriendRequest
+	FriendRequestResult
+	FriendAccept
+	FriendAcceptResult
+	UpdateFriendContent
 )
 
 type AuthResponse struct {
@@ -85,6 +91,67 @@ func (m *ClientResponse) EncodePayload(p interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
+	case FriendRequestResult:
+		// P is LoginDetails type
+		if result, ok := p.(*string); ok {
+
+			jsonData, err := json.Marshal(result)
+
+			if err != nil {
+				return err
+			}
+
+			m.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case FriendAcceptResult:
+		// P is LoginDetails type
+		if result, ok := p.(*string); ok {
+
+			jsonData, err := json.Marshal(result)
+
+			if err != nil {
+				return err
+			}
+
+			m.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case AllContent:
+		// P is LoginDetails type
+		if result, ok := p.(*UserContent); ok {
+
+			jsonData, err := json.Marshal(result)
+
+			if err != nil {
+				return err
+			}
+
+			m.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case UpdateFriendContent:
+		// P is LoginDetails type
+		if result, ok := p.(*UserContent); ok {
+
+			jsonData, err := json.Marshal(result)
+
+			if err != nil {
+				return err
+			}
+
+			m.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+
 	}
 
 	return nil
@@ -108,6 +175,59 @@ func (m *ClientResponse) DecodePayload(target interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
+	case FriendRequestResult:
+		// P is LoginDetails type
+		if _, ok := target.(*string); ok {
+
+			err := json.Unmarshal(m.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case FriendAcceptResult:
+		// P is LoginDetails type
+		if _, ok := target.(*string); ok {
+
+			err := json.Unmarshal(m.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case AllContent:
+		// P is LoginDetails type
+		if _, ok := target.(*UserContent); ok {
+
+			err := json.Unmarshal(m.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case UpdateFriendContent:
+		// P is LoginDetails type
+		if _, ok := target.(*UserContent); ok {
+
+			err := json.Unmarshal(m.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+
 	}
 
 	return nil
@@ -126,6 +246,21 @@ func (m *ClientMessage) EncodePayload(p interface{}) error {
 	case AttemptLogin:
 		// P is LoginDetails type
 		if result, ok := p.(*LoginDetails); ok {
+
+			jsonData, err := json.Marshal(result)
+
+			if err != nil {
+				return err
+			}
+
+			m.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case FriendAccept:
+		// P is LoginDetails type
+		if result, ok := p.(*FriendAcceptData); ok {
 
 			jsonData, err := json.Marshal(result)
 
@@ -162,6 +297,32 @@ func (m *ClientMessage) DecodePayload(target interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
+	case FriendRequest:
+		// P is LoginDetails type
+		if _, ok := target.(*string); ok {
+
+			err := json.Unmarshal(m.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case FriendAccept:
+		// P is LoginDetails type
+		if _, ok := target.(*FriendAcceptData); ok {
+
+			err := json.Unmarshal(m.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
 
 	}
 
@@ -170,4 +331,9 @@ func (m *ClientMessage) DecodePayload(target interface{}) error {
 
 func (c ClientMessage) GetPayload() json.RawMessage {
 	return c.Payload
+}
+
+type FriendAcceptData struct {
+	Accept    bool   `json:"accept"`
+	RequestId string `json:"request_id"`
 }

@@ -21,7 +21,6 @@ import (
 	8) Broadcast new client login/active/inactive to friend list.
 	9) Send messages between clients. Messages ae
 	10) On client login, synchronise message data.
-	11) We could combine mongo db and SQL here. Monog t o store message data, linked with a particular
 */
 
 func main() {
@@ -46,6 +45,10 @@ func main() {
 
 	// Get all users --> prints out to txt file
 	go dbConn.GetAllUsers()
+
+	//Listen for app wide messages, e.g. for broadcasting to multiple clients
+	com := make(chan *BackendMessage)
+	go AppListener(com, wsServer)
 
 	// Start server on PORT
 	fmt.Println("HTTP server started at http://localhost:8000")

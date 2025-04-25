@@ -121,7 +121,7 @@ func (c *conn) listenSocket() {
 	}
 }
 
-// Listen for messages from the backend and listen accordingly on goroutine
+// Listen for messages from the frontend and backend
 func (c *conn) listen(state *appState) error {
 	defer c.ws.Close()
 
@@ -150,16 +150,73 @@ readLoop:
 				}
 			case LoginSuccessful:
 				state.SetLoggedIn()
-				// Welcome user
 				c.UIBroadcast <- &AppMessage{
 					Code:    LoginSuccessful,
 					Message: "You are logged in",
 				}
+
+			case AllContent:
+				/*
+					Receive all conetnt from backend.
+						1) Friends (and status) - DONE
+						2) Friend requests		- DONE
+						3) Messages from past few days - DONE
+				*/
+
+				var userContent UserContent
+				var err error
+				err = response.DecodePayload(&userContent)
+
+				if err != nil {
+
+				}
+				err = state.AssignAllContent(&userContent)
+
+				if err != nil {
+
+				}
+
+				c.UIBroadcast <- &AppMessage{
+					Code:    AllContent,
+					Message: "All user content fetched",
+				}
+
+			case UpdateFriendContent:
+				var userContent UserContent
+				var err error
+				err = response.DecodePayload(&userContent)
+
+				if err != nil {
+
+				}
+				err = state.AssignFriendshipContent(&userContent)
+
+				if err != nil {
+
+				}
+
+				c.UIBroadcast <- &AppMessage{
+					Code:    UpdateFriendContent,
+					Message: "Friend data updated",
+				}
+
+				//TODO: broadcast error message
 			case SearchUsersResults:
-				// Welcome user
 
 				c.UIBroadcast <- &AppMessage{
 					Code:    SearchUsersResults,
+					Message: "Results",
+					Payload: response.GetPayload(),
+				}
+			case FriendRequestResult:
+				c.UIBroadcast <- &AppMessage{
+					Code:    FriendRequestResult,
+					Message: "Results",
+					Payload: response.GetPayload(),
+				}
+			case FriendAcceptResult:
+				c.UIBroadcast <- &AppMessage{
+					Code:    FriendAcceptResult,
 					Message: "Results",
 					Payload: response.GetPayload(),
 				}
@@ -181,6 +238,22 @@ readLoop:
 				// Send message
 				c.SendMessage(&clientMess)
 			case SearchUsers:
+				// Message
+				clientMess := ClientMessage{
+					Code:    message.Code,
+					Payload: message.Payload,
+				}
+				// Send message
+				c.SendMessage(&clientMess)
+			case FriendRequest:
+				// Message
+				clientMess := ClientMessage{
+					Code:    message.Code,
+					Payload: message.Payload,
+				}
+				// Send message
+				c.SendMessage(&clientMess)
+			case FriendAccept:
 				// Message
 				clientMess := ClientMessage{
 					Code:    message.Code,

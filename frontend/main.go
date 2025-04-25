@@ -53,9 +53,54 @@ func (a *AppMessage) EncodePayload(p interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
+	case FriendRequest:
+		// P is LoginDetails type
+		if result, ok := p.(*string); ok {
+
+			jsonData, err := json.Marshal(*result)
+
+			if err != nil {
+				return err
+			}
+
+			a.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
 	case SearchUsersResults:
 		// P is LoginDetails type
 		if result, ok := p.(*UsersSearch); ok {
+
+			jsonData, err := json.Marshal(result)
+
+			if err != nil {
+				return err
+			}
+
+			a.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case AllContent:
+		// P is LoginDetails type
+		if result, ok := p.(*UserContent); ok {
+
+			jsonData, err := json.Marshal(result)
+
+			if err != nil {
+				return err
+			}
+
+			a.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case FriendAccept:
+		// P is LoginDetails type
+		if result, ok := p.(*FriendAcceptData); ok {
 
 			jsonData, err := json.Marshal(result)
 
@@ -118,6 +163,58 @@ func (a *AppMessage) DecodePayload(target interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
+	case FriendRequestResult:
+		// P is LoginDetails type
+		if _, ok := target.(*string); ok {
+
+			err := json.Unmarshal(a.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case FriendAcceptResult:
+		// P is LoginDetails type
+		if _, ok := target.(*string); ok {
+
+			err := json.Unmarshal(a.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case AllContent:
+		// P is LoginDetails type
+		if _, ok := target.(*UserContent); ok {
+
+			err := json.Unmarshal(a.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case FriendAccept:
+		// P is LoginDetails type
+		if _, ok := target.(*FriendAcceptData); ok {
+
+			err := json.Unmarshal(a.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
 
 	}
 
@@ -143,6 +240,11 @@ type appState struct {
 	//Channels to receive UI message
 	UISubscriptions []chan *AppMessage
 
+	// All user content
+	friends        []Friend
+	friendRequests []FriendReqDetails
+	messages       Messages
+
 	// Done
 	done chan struct{}
 
@@ -166,6 +268,27 @@ func NewAppState(app *tview.Application) *appState {
 		mu:   sync.Mutex{},
 		rwmu: sync.RWMutex{},
 	}
+}
+
+func (m *appState) AssignAllContent(u *UserContent) error {
+	m.rwmu.Lock()
+	defer m.rwmu.Unlock()
+
+	m.friends = u.Friends
+	m.friendRequests = u.FriendRequests
+	m.messages = u.Messages
+	return nil
+
+}
+
+func (m *appState) AssignFriendshipContent(u *UserContent) error {
+	m.rwmu.Lock()
+	defer m.rwmu.Unlock()
+
+	m.friends = u.Friends
+	m.friendRequests = u.FriendRequests
+	return nil
+
 }
 
 func (m *appState) OpenConnection() error {
@@ -237,7 +360,7 @@ func main() {
 	app := tview.NewApplication()
 
 	myAppState := NewAppState(app)
-	go logger(myAppState)
+	// go logger(myAppState)
 
 	// Mnage intra-app messages
 	go messageBroker(myAppState)
@@ -264,7 +387,7 @@ func main() {
 
 func logger(s *appState) {
 	// Choose a known TTY path (you need to know this or find it dynamically)
-	ttyPath := "/dev/pts/1" // Change this to your actual terminal device!
+	ttyPath := "/dev/pts/0" // Change this to your actual terminal device!
 
 	// Open that terminal's device file
 	tty, err := os.OpenFile(ttyPath, os.O_WRONLY, 0600)
@@ -289,9 +412,8 @@ func messageBroker(s *appState) {
 		select {
 		case m := <-s.UIBroadcast:
 
-			for i, sub := range s.UISubscriptions {
+			for _, sub := range s.UISubscriptions {
 
-				log.Println(m, sub, i)
 				// Broadcast message on subscribed UI element
 				sub <- m
 			}

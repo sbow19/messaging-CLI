@@ -1,100 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
-
-type FriendsBarPrimitive struct {
-	// Reference to underlying primitive
-	prim *tview.Grid
-
-	UIChannels
-}
-
-func (f *FriendsBarPrimitive) End() {
-	f.done <- struct{}{}
-}
-
-func (f *FriendsBarPrimitive) GetPrim() tview.Primitive {
-	return f.prim
-}
-
-func FriendBoxFac() *tview.Frame {
-	frame := tview.NewFrame(
-		tview.NewFlex(),
-	)
-	frame.SetBorderPadding(0, 0, 0, 0)
-	frame.SetBorder(true)
-
-	return frame
-}
-
-func FriendsBar(s *appState) IOPrimitive {
-
-	// Indicator bar
-	bar := tview.NewBox().SetBackgroundColor(tcell.Color101)
-
-	// Friends bar --> Add friends to list. TODO: scrollable?
-	// Possibly paginate when clicking up and down arrows
-	// Dynamically render when new friends message
-	grid := tview.NewGrid().SetGap(0, 0).SetSize(1, 1, 1, 1)
-	grid.SetBorderPadding(0, 0, 0, 0)
-	grid.AddItem(
-		FriendBoxFac(), 1, 1, 1, 1, 1, 1, false,
-	).AddItem(
-		FriendBoxFac(), 2, 1, 1, 1, 0, 0, false,
-	).AddItem(
-		FriendBoxFac(), 3, 1, 1, 1, 0, 0, false,
-	).AddItem(
-		FriendBoxFac(), 4, 1, 1, 1, 0, 0, false,
-	).AddItem(
-		FriendBoxFac(), 5, 1, 1, 1, 0, 0, false,
-	).AddItem(
-		bar, 6, 1, 1, 1, 0, 0, false,
-	)
-	grid.SetBorder(true)
-
-	uiCh := UIChannels{
-		RecUIMess:      make(chan *AppMessage, 3),
-		NetworkMessage: s.networkBroadcast,
-		UIMessage:      s.UIBroadcast,
-		done:           make(chan struct{}),
-	}
-
-	friendBar := FriendsBarPrimitive{
-		prim:       grid,
-		UIChannels: uiCh,
-	}
-
-	// Register primitive with UI broadcast handler
-	err := s.SubscribeChannel(friendBar.RecUIMess, UI)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Listen to UI broadcasts
-	go func() {
-
-		for {
-			select {
-			case m := <-friendBar.RecUIMess:
-				switch m.Code {
-				default:
-					/*Do nothing*/
-				}
-
-			case <-friendBar.done:
-				break
-			}
-		}
-
-	}()
-	return &friendBar
-}
 
 // Cycle between pages of search, and chat with friends
 
@@ -169,12 +81,19 @@ func FriendsPages(s *appState) IOPrimitive {
 	search := SearchScreen(s)
 
 	// Friends page
+	var friends IOPrimitive
+	friends = FriendsScreen(s)
 
 	// Pending friends page
+	var pending IOPrimitive
+	pending = PendingScreen(s)
 
 	// Configuring pages behavior
 	pages.AddPage("List", list, true, true)
 	pages.AddPage("Search", search.GetPrim(), true, false)
+	pages.AddPage("Friends", friends.GetPrim(), true, false)
+
+	pages.AddPage("Pending", pending.GetPrim(), true, false)
 
 	pages.SetBorder(false)
 	pages.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -209,6 +128,13 @@ func FriendsPages(s *appState) IOPrimitive {
 			case m := <-friendPages.RecUIMess:
 
 				switch m.Code {
+				case UpdateFriendContent:
+					pages.RemovePage("Friends").RemovePage("Pending")
+					friends = FriendsScreen(s)
+					pending = PendingScreen(s)
+					pages.AddPage("Friends", friends.GetPrim(), true, false)
+					pages.AddPage("Pending", pending.GetPrim(), true, false)
+
 				default:
 					// Do nothing
 				}
@@ -254,9 +180,51 @@ func (f *SearchScreenPrimitive) GetPrim() tview.Primitive {
 	return f.prim
 }
 
+func ResultBoxFac(n string, net chan *AppMessage) *tview.Frame {
+
+	txt := tview.NewTextView()
+	txt.SetText(fmt.Sprintf("%q\n\nDo you want to add friend?(y)", n)).SetBorder(true)
+
+	txt.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Rune() {
+		case 'y':
+			// Send network message
+			appMess := AppMessage{
+				Code:    FriendRequest,
+				Payload: nil,
+				Message: "Friend request sent",
+			}
+
+			appMess.EncodePayload(&n)
+
+			net <- &appMess
+			return nil
+		}
+		return event
+	})
+
+	frame := tview.NewFrame(
+		txt,
+	)
+	frame.SetBorderPadding(0, 0, 0, 0)
+	frame.SetBorder(true)
+
+	return frame
+}
+
+func ResultNoFac(no int) *tview.Frame {
+	frame := tview.NewFrame(
+		tview.NewTextView().SetText(fmt.Sprintf("Results: %d", no)),
+	)
+	frame.SetBorderPadding(0, 0, 0, 0)
+	frame.SetBorder(true)
+
+	return frame
+}
+
 func SearchScreen(s *appState) IOPrimitive {
 
-	flex := tview.NewFlex()
+	flex := tview.NewFlex().SetDirection(tview.FlexRow)
 	flex.SetBorder(true)
 
 	uiCh := UIChannels{
@@ -289,13 +257,16 @@ func SearchScreen(s *appState) IOPrimitive {
 				case SearchUsersResults:
 					var results UsersSearch
 					m.DecodePayload(&results)
-					for _, n := range results {
 
-						txt := tview.NewTextView()
-						txt.SetText(n).SetBorder(true).SetBackgroundColor(tcell.ColorGold)
-						flex.AddItem(
-							txt, 0, 1, false,
-						)
+					// Set header
+					header := ResultNoFac(len(results))
+					flex.AddItem(
+						header, 0, 1, false,
+					)
+
+					for _, n := range results {
+						resultBox := ResultBoxFac(n, search.NetworkMessage)
+						flex.AddItem(resultBox, 0, 1, false)
 					}
 				default:
 					// Do nothing
@@ -311,11 +282,239 @@ func SearchScreen(s *appState) IOPrimitive {
 	return &search
 }
 
-func FriendsScreen() {
+// List of all friends, and their active status
+func FriendFac(n *Friend, net chan *AppMessage) *tview.Frame {
 
+	var activeText string
+	var borderColor tcell.Color
+
+	if n.Active {
+		activeText = "is active"
+		borderColor = tcell.ColorGreen
+	} else {
+		activeText = "is inactive"
+		borderColor = tcell.ColorDarkRed
+	}
+
+	txt := tview.NewTextView()
+	txt.SetText(fmt.Sprintf("%v %v", n.Username, activeText)).
+		SetBorder(true).
+		SetBorderColor(borderColor)
+
+	txt.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// TODO: go to message screen
+		return event
+	})
+
+	frame := tview.NewFrame(
+		txt,
+	)
+	frame.SetBorderPadding(0, 0, 0, 0)
+	frame.SetBorder(true)
+
+	return frame
 }
 
-func PendingScreen() {
+type FriendListPrimitive struct {
+	// Reference to underlying primitive
+	prim *tview.Flex
+
+	UIChannels
+}
+
+func (f *FriendListPrimitive) End() {
+	f.done <- struct{}{}
+}
+
+func (f *FriendListPrimitive) GetPrim() tview.Primitive {
+	return f.prim
+}
+
+func FriendsScreen(s *appState) IOPrimitive {
+
+	var flex *tview.Flex
+	flex = tview.NewFlex().SetDirection(tview.FlexRow)
+	flex.SetBorder(true)
+
+	uiCh := UIChannels{
+		RecUIMess:      make(chan *AppMessage, 3),
+		UIMessage:      s.UIBroadcast,
+		NetworkMessage: s.networkBroadcast,
+		done:           make(chan struct{}),
+	}
+
+	list := FriendListPrimitive{
+		prim:       flex,
+		UIChannels: uiCh,
+	}
+
+	// Register primitive with UI broadcast handler
+	err := s.SubscribeChannel(list.RecUIMess, UI)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Listen to UI broadcasts
+	go func() {
+
+		for {
+			select {
+			case m := <-list.RecUIMess:
+
+				switch m.Code {
+				case AllContent:
+
+					// Set header
+					for _, n := range s.friends {
+						resultBox := FriendFac(&n, list.UIMessage)
+						flex.AddItem(resultBox, 0, 1, false)
+					}
+
+				default:
+					// Do nothing
+				}
+
+			case <-list.done:
+				break
+			}
+		}
+
+	}()
+
+	return &list
+}
+
+type PendingScreenPrimitive struct {
+	// Reference to underlying primitive
+	prim *tview.Flex
+	UIChannels
+}
+
+func (f *PendingScreenPrimitive) End() {
+	f.done <- struct{}{}
+}
+
+func (f *PendingScreenPrimitive) GetPrim() tview.Primitive {
+	return f.prim
+}
+
+func RequestBoxFac(n *FriendReqDetails, net chan *AppMessage) *tview.Frame {
+
+	txt := tview.NewTextView()
+
+	var displayTxt string
+	var displayBorderCol tcell.Color
+	if n.FromClient {
+		displayTxt = fmt.Sprintf("%v\nFriend request pending", n.Username)
+		displayBorderCol = tcell.ColorOrange
+	} else {
+		displayTxt = fmt.Sprintf("Friend request from %v: accept? (y/n)", n.Username)
+		displayBorderCol = tcell.ColorBlue
+
+	}
+	txt.SetText(displayTxt).SetBorder(true).SetBackgroundColor(displayBorderCol)
+	txt.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Rune() {
+		case 'n':
+			// Send message to backend with rejection
+			aMess := AppMessage{
+				Code:    FriendAccept,
+				Payload: nil,
+				Message: "Reject friend request",
+			}
+
+			b := FriendAcceptData{
+				Accept:    false,
+				RequestId: n.RequestId,
+			}
+
+			aMess.EncodePayload(&b)
+
+			net <- &aMess
+
+			return nil
+		case 'y':
+			// Send message to backend with acceptance
+			aMess := AppMessage{
+				Code:    FriendAccept,
+				Payload: nil,
+				Message: "Accept friend request",
+			}
+
+			b := FriendAcceptData{
+				Accept:    true,
+				RequestId: n.RequestId,
+			}
+
+			aMess.EncodePayload(&b)
+
+			net <- &aMess
+			return nil
+		}
+		return event
+	})
+
+	frame := tview.NewFrame(
+		txt,
+	)
+	frame.SetBorderPadding(0, 0, 0, 0)
+	frame.SetBorder(true)
+
+	return frame
+}
+
+func PendingScreen(s *appState) IOPrimitive {
+
+	flex := tview.NewFlex().SetDirection(tview.FlexRow)
+	flex.SetBorder(true)
+
+	uiCh := UIChannels{
+		RecUIMess:      make(chan *AppMessage, 3),
+		UIMessage:      s.UIBroadcast,
+		NetworkMessage: s.networkBroadcast,
+		done:           make(chan struct{}),
+	}
+
+	search := PendingScreenPrimitive{
+		prim:       flex,
+		UIChannels: uiCh,
+	}
+
+	// Register primitive with UI broadcast handler
+	err := s.SubscribeChannel(search.RecUIMess, UI)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Listen to UI broadcasts
+	go func() {
+
+		for {
+			select {
+			case m := <-search.RecUIMess:
+
+				switch m.Code {
+				case AllContent:
+
+					// Set header
+					for _, n := range s.friendRequests {
+						resultBox := RequestBoxFac(&n, s.networkBroadcast)
+						flex.AddItem(resultBox, 0, 1, false)
+					}
+				default:
+					// Do nothing
+				}
+
+			case <-search.done:
+				break
+			}
+		}
+
+	}()
+
+	return &search
 
 }
 

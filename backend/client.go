@@ -25,6 +25,7 @@ func (l *Users) allUsers() []string {
 type clientData struct {
 	message      string
 	accountMade  bool
+	username     string
 	welcomeSent  bool
 	loginDetails LoginDetails
 	loggedIn     bool
@@ -133,6 +134,7 @@ var UserMap Users = Users{
 	"123456": {
 		message: "dummy message",
 		apiKey:  "123456",
+
 		loginDetails: LoginDetails{
 			Username: "hello",
 			Password: "password",

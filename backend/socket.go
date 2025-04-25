@@ -26,7 +26,6 @@ type ClientConnection struct {
 func (c *ClientConnection) SendOnConnection(m Response) *RequestError {
 
 	// DEbugging with message
-	// fmt.Println(m)
 
 	jsonData, err := json.Marshal(m)
 
@@ -183,8 +182,22 @@ func (s *Server) handleWS(ws *websocket.Conn, k apiKey) {
 		return
 	}
 
+	// Assuming auth loop passed, then get user data
+	err = s.SendAllContent(ws, k)
+	if err != nil {
+		s.clients[k].SendOnConnection(
+			&ClientResponse{
+				Err:     err,
+				Message: err.Message,
+				Code:    err.Code,
+			})
+
+		// Clean up connection with the client
+		return
+	}
+
 	// Start listening to frontend messages
-	s.readLoop(ws)
+	s.readLoop(ws, k)
 }
 
 // Communicate regarding authentication
@@ -270,9 +283,56 @@ reqErrSend:
 	return reqErr
 }
 
+func (s *Server) SendAllContent(ws *websocket.Conn, k apiKey) *RequestError {
+
+	var reqErr *RequestError
+	var contentResp *ClientResponse
+	var allContent *UserContent
+	var err error
+
+	contentResp = &ClientResponse{
+		Code:    AllContent,
+		Message: "All user content",
+		Err:     nil,
+		Payload: nil,
+	}
+
+	// Get all user content
+	allContent, err = dbConn.GetAllUserContent(k)
+
+	if err != nil {
+		goto reqErrSend
+	}
+
+	//Encode data in client response
+	contentResp = &ClientResponse{
+		Code:    AllContent,
+		Err:     nil,
+		Message: "All user content",
+		Payload: nil,
+	}
+
+	err = contentResp.EncodePayload(allContent)
+
+	if err != nil {
+		goto reqErrSend
+	}
+
+	err = s.clients[k].SendOnConnection(contentResp)
+	if err != nil {
+		goto reqErrSend
+	}
+
+	return nil
+
+reqErrSend:
+	fmt.Println(err)
+	return reqErr
+}
+
 // Read incoming messages from the client. Several different operations - friends find, friend request
 // and actual text sent between users.
-func (s *Server) readLoop(ws *websocket.Conn) {
+func (s *Server) readLoop(ws *websocket.Conn, k apiKey) {
 
 	var clientMessage ClientMessage
 	for {
@@ -317,6 +377,65 @@ func (s *Server) readLoop(ws *websocket.Conn) {
 				log.Fatal(err)
 			}
 
+		case FriendRequest:
+			// Attempt to search database for users
+			var name string
+			var err error
+			var result string
+
+			clientMessage.DecodePayload(&name)
+			err = SetFriendRequest(name, string(k))
+
+			if err != nil {
+				result = "Failed to save friend request"
+			} else {
+				result = "Friend request sent"
+			}
+
+			clientResponse := ClientResponse{
+				Code:    FriendRequestResult,
+				Payload: nil,
+				Err:     nil,
+				Message: "",
+			}
+			clientResponse.EncodePayload(&result)
+
+			err = websocket.JSON.Send(ws, &clientResponse)
+
+			if err != nil {
+				log.Fatal(err)
+			}
+
+		case FriendAccept:
+			var friendAcceptData FriendAcceptData
+			var err error
+			var result string
+
+			clientMessage.DecodePayload(&friendAcceptData)
+			err = UpdateFriendRequest(&friendAcceptData, string(k))
+
+			if err != nil {
+				result = "Failed to accept request"
+			} else {
+				result = "Friend accepted successfully"
+			}
+
+			clientResponse := ClientResponse{
+				Code:    FriendAcceptResult,
+				Payload: nil,
+				Err:     nil,
+				Message: "",
+			}
+			clientResponse.EncodePayload(&result)
+
+			err = websocket.JSON.Send(ws, &clientResponse)
+
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// Network broadcast to update friends under  given friendship ID
+
 		}
 
 	}
@@ -326,4 +445,18 @@ func UserSearchResults(s string) (*UsersSearch, error) {
 	//Search db for users
 	return dbConn.GetUsers(s)
 
+}
+
+func SetFriendRequest(name string, id string) error {
+	return dbConn.SetFriendRequest(name, id)
+}
+
+func UpdateFriendRequest(f *FriendAcceptData, id string) error {
+	if f.Accept {
+
+		return dbConn.CreateFriend(f, id)
+	} else {
+		return dbConn.DeleteFriendRequest(f, id)
+
+	}
 }

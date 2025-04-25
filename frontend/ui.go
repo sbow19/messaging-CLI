@@ -35,7 +35,7 @@ func getUI(state *appState) *tview.Flex {
 	inputBar := InputBar(state)
 
 	// Friends bar
-	friendsBar := FriendsBar(state)
+	notificationsBar := NotificationsBar(state)
 
 	// Main Display
 	display := MainScreenPages(state)
@@ -46,12 +46,12 @@ func getUI(state *appState) *tview.Flex {
 			AddItem(display.GetPrim(), 0, 5, false).
 			AddItem(inputBar.GetPrim(), 0, 1, true),
 			0, 4, false).
-		AddItem(friendsBar.GetPrim(), 0, 1, false)
+		AddItem(notificationsBar.GetPrim(), 0, 1, false)
 
 	pageSlice := []IOPrimitive{
 		inputBar,
 		display,
-		friendsBar,
+		notificationsBar,
 	}
 	i := 0
 

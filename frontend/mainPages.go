@@ -60,6 +60,13 @@ func NewMessageBox(s *appState) IOPrimitive {
 				case SearchUsers:
 					messageBox.SetText("")
 					messageBox.SetText(m.Message)
+				case FriendRequestResult:
+					var result string
+					m.DecodePayload(&result)
+					messageBox.SetText(result)
+				case UpdateFriendContent:
+					messageBox.SetText("")
+					messageBox.SetText(m.Message)
 				default:
 					//Do nothing
 				}
