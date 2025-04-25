@@ -187,20 +187,21 @@ readLoop:
 				err = response.DecodePayload(&userContent)
 
 				if err != nil {
-
+					log.Fatal(err)
 				}
 				err = state.AssignFriendshipContent(&userContent)
 
 				if err != nil {
+					log.Fatal(err)
 
 				}
 
 				c.UIBroadcast <- &AppMessage{
 					Code:    UpdateFriendContent,
 					Message: "Friend data updated",
+					Payload: nil,
 				}
 
-				//TODO: broadcast error message
 			case SearchUsersResults:
 
 				c.UIBroadcast <- &AppMessage{
@@ -220,6 +221,32 @@ readLoop:
 					Message: "Results",
 					Payload: response.GetPayload(),
 				}
+
+			case ReceiveMessage:
+				var message Message
+				var err error
+				err = response.DecodePayload(&message)
+
+				if err != nil {
+					log.Fatal(err)
+				}
+				err = state.AppendMessage(&message)
+
+				if err != nil {
+					log.Fatal(err)
+
+				}
+
+				appMessage := AppMessage{
+					Code:    ReceiveMessage,
+					Message: "Friend data updated",
+					Payload: nil,
+				}
+
+				appMessage.EncodePayload(&message)
+
+				c.UIBroadcast <- &appMessage
+
 			default:
 
 			}
@@ -261,6 +288,15 @@ readLoop:
 				}
 				// Send message
 				c.SendMessage(&clientMess)
+			case SendMessage:
+				// Message
+				clientMess := ClientMessage{
+					Code:    message.Code,
+					Payload: message.Payload,
+				}
+				// Send message
+				c.SendMessage(&clientMess)
+
 			}
 
 		case <-c.done:

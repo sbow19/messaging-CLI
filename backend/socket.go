@@ -6,15 +6,18 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"sync"
+	"time"
 
 	"golang.org/x/net/websocket"
 )
 
 // Server factory
 type Server struct {
-	clients conns
-	mu      sync.Mutex
+	clients   conns
+	broadcast chan *BackendMessage
+	mu        sync.Mutex
 }
 
 type conns map[apiKey]*ClientConnection
@@ -27,6 +30,7 @@ func (c *ClientConnection) SendOnConnection(m Response) *RequestError {
 
 	// DEbugging with message
 
+	fmt.Println(m)
 	jsonData, err := json.Marshal(m)
 
 	if err != nil {
@@ -54,8 +58,9 @@ func (c *ClientConnection) SendOnConnection(m Response) *RequestError {
 
 func NewServer() *Server {
 	return &Server{
-		clients: make(map[apiKey]*ClientConnection),
-		mu:      sync.Mutex{},
+		clients:   make(map[apiKey]*ClientConnection),
+		broadcast: make(chan *BackendMessage),
+		mu:        sync.Mutex{},
 	}
 }
 
@@ -332,6 +337,12 @@ reqErrSend:
 
 // Read incoming messages from the client. Several different operations - friends find, friend request
 // and actual text sent between users.
+
+type ChatBroadcast struct {
+	Chat       *Message  `json:"chat"`
+	Friendship *[]string `json:"friendship"`
+}
+
 func (s *Server) readLoop(ws *websocket.Conn, k apiKey) {
 
 	var clientMessage ClientMessage
@@ -379,12 +390,13 @@ func (s *Server) readLoop(ws *websocket.Conn, k apiKey) {
 
 		case FriendRequest:
 			// Attempt to search database for users
-			var name string
+			var name string // receiver of request
 			var err error
 			var result string
+			var friendRequestId string
 
 			clientMessage.DecodePayload(&name)
-			err = SetFriendRequest(name, string(k))
+			friendRequestId, err = SetFriendRequest(name, string(k))
 
 			if err != nil {
 				result = "Failed to save friend request"
@@ -406,12 +418,24 @@ func (s *Server) readLoop(ws *websocket.Conn, k apiKey) {
 				log.Fatal(err)
 			}
 
+			// Network broadcast to update clients
+			s.broadcast <- &BackendMessage{
+				Code:    BroadcastFriendRequest,
+				Payload: friendRequestId,
+			}
+
 		case FriendAccept:
 			var friendAcceptData FriendAcceptData
+			var friendIds *[]string
 			var err error
 			var result string
 
 			clientMessage.DecodePayload(&friendAcceptData)
+			friendIds, err = dbConn.GetFriendRequestById(friendAcceptData.RequestId)
+
+			if err != nil {
+				log.Fatalln(err)
+			}
 			err = UpdateFriendRequest(&friendAcceptData, string(k))
 
 			if err != nil {
@@ -435,6 +459,62 @@ func (s *Server) readLoop(ws *websocket.Conn, k apiKey) {
 			}
 
 			// Network broadcast to update friends under  given friendship ID
+			s.broadcast <- &BackendMessage{
+				Code:    BroadcastFriendship,
+				Payload: friendIds,
+			}
+
+		case SendMessage:
+			var chat Chat
+			var message Message
+			var err error
+			var friendship *[]string
+			// Decode chat message
+			err = clientMessage.DecodePayload(&chat)
+
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// Save message in database
+			friendship, err = dbConn.SaveMessage(&chat, k)
+
+			// Sneder name
+			result, ok := UserMap[k]
+
+			if !ok {
+				log.Fatal("Obtaining sender name from UserMap failed")
+
+			}
+
+			layout := "2006-01-02 15:04"
+			t, err := time.Parse(layout, "2025-05-10 15:24")
+			if err != nil {
+				panic(err)
+			}
+
+			timestampStr := strconv.FormatInt(t.UnixMilli(), 10)
+
+			message = Message{
+				Text:     chat.Text,
+				Date:     timestampStr,
+				Receiver: chat.Receiver,
+				Sender:   result.username,
+			}
+
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// If receiving user is active, then send new message immediately
+			// Network broadcast to update friends under  given friendship ID
+			s.broadcast <- &BackendMessage{
+				Code: BroadcastChat,
+				Payload: &ChatBroadcast{
+					Chat:       &message,
+					Friendship: friendship,
+				},
+			}
 
 		}
 
@@ -447,16 +527,17 @@ func UserSearchResults(s string) (*UsersSearch, error) {
 
 }
 
-func SetFriendRequest(name string, id string) error {
+func SetFriendRequest(name string, id string) (string, error) {
 	return dbConn.SetFriendRequest(name, id)
 }
 
 func UpdateFriendRequest(f *FriendAcceptData, id string) error {
 	if f.Accept {
-
+		// Returns new friendship Id
 		return dbConn.CreateFriend(f, id)
 	} else {
-		return dbConn.DeleteFriendRequest(f, id)
+		// Return friend request id
+		return dbConn.DeleteFriendRequest(f.RequestId)
 
 	}
 }

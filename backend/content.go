@@ -19,8 +19,10 @@ type FriendReqDetails struct {
 type Messages map[string][]Message
 
 type Message struct {
-	Text string `json:"text"`
-	Date string `json:"date"`
+	Text     string `json:"text"`
+	Sender   string `json:"sender"`
+	Receiver string `json:"receiver"`
+	Date     string `json:"date"`
 }
 
 // All data

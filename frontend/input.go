@@ -116,6 +116,47 @@ func InputBar(s *appState) IOPrimitive {
 						},
 					}
 					go PromptFlow(ctx, m.Code, &questions, m.Message, textarea, input.NetworkMessage, input.prim, &user)
+				case GameStart:
+					// Cancel any previous prompt
+					if cancelPrompt != nil {
+						cancelPrompt()
+					}
+
+					input.prim.Clear()
+					textarea.SetText("", false)
+
+				case OpenChat, ReceiveMessage:
+					// Cancel any previous prompt
+					if cancelPrompt != nil {
+						cancelPrompt()
+					}
+
+					input.prim.Clear()
+					textarea.SetText("", false)
+
+					// Create a new context for this message
+					var ctx context.Context
+					ctx, cancelPrompt = context.WithCancel(context.Background())
+
+					//Message object
+					usr := ""
+					m.DecodePayload(usr)
+					chat := Chat{
+						Text:     "",
+						Receiver: usr,
+						Sender:   "",
+					}
+
+					questions := Questions{
+						&Question{
+							q: "Type to chat",
+							ref: func(input string) {
+								chat.Text = input
+							},
+						},
+					}
+					go PromptFlow(ctx, SendMessage, &questions, m.Message, textarea, input.NetworkMessage, input.prim, &chat)
+
 				default:
 					/*Do Nothing*/
 				}

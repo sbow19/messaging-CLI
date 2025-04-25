@@ -183,7 +183,7 @@ retErr:
 }
 
 // Get all users and log to db.txt
-func (c *DBConn) GetAllUsers() error {
+func (c *DBConn) GetAll() error {
 
 	var err error
 	var rows *sql.Rows
@@ -251,6 +251,83 @@ func (c *DBConn) GetAllUsers() error {
 			mu:       sync.Mutex{},
 			rwmu:     sync.RWMutex{},
 		}
+	}
+
+	/*
+		Friend requests
+	*/
+
+	outputString += "\n\n"
+	rows, err = c.db.Query(
+		`
+		SELECT * FROM friend_requests
+		;
+		`,
+	)
+	if err != nil {
+		goto retErr
+	}
+	defer rows.Close()
+
+	// Data to write into output text file
+	for rows.Next() {
+		var id string
+		var user1 string
+		var user2 string
+
+		err = rows.Scan(
+			&id,
+			&user1,
+			&user2,
+		)
+
+		if err != nil {
+			goto retErr
+		}
+
+		outputString += fmt.Sprintf("requestid: %q, reqId: %q, resId: %q\n",
+			id,
+			user1,
+			user2,
+		)
+	}
+
+	/*
+		Friendships
+	*/
+	outputString += "\n\n"
+	rows, err = c.db.Query(
+		`
+		SELECT * FROM friends
+		;
+		`,
+	)
+	if err != nil {
+		goto retErr
+	}
+	defer rows.Close()
+
+	// Data to write into output text file
+	for rows.Next() {
+		var id string
+		var user1 string
+		var user2 string
+
+		err = rows.Scan(
+			&id,
+			&user1,
+			&user2,
+		)
+
+		if err != nil {
+			goto retErr
+		}
+
+		outputString += fmt.Sprintf("friendshipId: %q, reqId: %q, resId: %q\n",
+			id,
+			user1,
+			user2,
+		)
 	}
 
 	os.WriteFile("db.txt", []byte(outputString), 0644)
@@ -496,6 +573,53 @@ retErr:
 	}
 }
 
+// Get  friendship id by  friend ids
+func (c *DBConn) GetFriendshipByIds(id1 string, id2 string) (*[]string, error) {
+	var err error
+	var rows *sql.Rows
+	var stmt *sql.Stmt
+	var output []string
+
+	// Query db
+	stmt, err = c.db.Prepare(
+		`
+		SELECT * FROM friends
+		WHERE (user1 = ? AND user2 = ?)
+   			OR (user1 = ? AND user2 = ?)
+		;
+		`,
+	)
+	if err != nil {
+		goto retErr
+	}
+	defer stmt.Close()
+
+	rows, err = stmt.Query(id1, id2, id2, id1)
+	if err != nil {
+		goto retErr
+	}
+	defer rows.Close()
+
+	// Data to write into output text file
+	for rows.Next() {
+
+		var friendshipId string
+		var user1 string
+		var user2 string
+
+		if err := rows.Scan(&friendshipId, &user1, &user2); err != nil {
+			goto retErr
+		}
+		output = append(output, friendshipId, user1, user2)
+	}
+	return &output, nil
+
+retErr:
+	{
+		return nil, err
+	}
+}
+
 func generateId() (string, error) {
 	bytes := make([]byte, 16)
 	if _, err := rand.Read(bytes); err != nil {
@@ -504,7 +628,7 @@ func generateId() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-func (c *DBConn) SetFriendRequest(name string, reqId string) error {
+func (c *DBConn) SetFriendRequest(name string, reqId string) (string, error) {
 
 	var err error
 	var stmt *sql.Stmt
@@ -530,7 +654,7 @@ func (c *DBConn) SetFriendRequest(name string, reqId string) error {
 	}
 
 	if len(*userSearch) > 0 {
-		return fmt.Errorf("friend request already exists")
+		return "", fmt.Errorf("friend request already exists")
 	}
 
 	//Friend request id
@@ -577,7 +701,7 @@ func (c *DBConn) SetFriendRequest(name string, reqId string) error {
 		goto rollback
 	}
 
-	return nil
+	return id, nil
 
 	// Cleanup
 rollback:
@@ -586,12 +710,12 @@ rollback:
 	}
 retErr:
 	{
-		return err
+		return "", err
 	}
 
 }
 
-func (c *DBConn) DeleteFriendRequest(f *FriendAcceptData, userId string) error {
+func (c *DBConn) DeleteFriendRequest(requestId string) error {
 
 	var err error
 	var stmt *sql.Stmt
@@ -622,7 +746,7 @@ func (c *DBConn) DeleteFriendRequest(f *FriendAcceptData, userId string) error {
 
 	// Execute statement
 	_, err = stmt.Exec(
-		f.RequestId,
+		requestId,
 	)
 
 	if err != nil {
@@ -665,7 +789,6 @@ func (c *DBConn) CreateFriend(f *FriendAcceptData, userId string) error {
 
 	// Get reqid and resid
 	res, err = c.GetFriendRequestById(f.RequestId)
-	fmt.Println(res)
 	if err != nil {
 		goto retErr
 	}
@@ -700,6 +823,27 @@ func (c *DBConn) CreateFriend(f *FriendAcceptData, userId string) error {
 		goto rollback
 	}
 
+	// Delete friendship request
+	// Prepare delete statement
+	stmt, err = tx.Prepare(
+		`
+	DELETE FROM friend_requests WHERE id = ?;
+	`,
+	)
+
+	if err != nil {
+		goto retErr
+	}
+
+	// Execute statement
+	_, err = stmt.Exec(
+		f.RequestId,
+	)
+
+	if err != nil {
+		goto rollback
+	}
+
 	err = tx.Commit()
 
 	if err != nil {
@@ -715,12 +859,89 @@ rollback:
 	}
 retErr:
 	{
+		fmt.Println(err)
 		return err
 	}
 
 }
 
-// Get all user content
+// Save message
+func (c *DBConn) SaveMessage(chat *Chat, userId apiKey) (*[]string, error) {
+
+	var err error
+	var stmt *sql.Stmt
+	var tx *sql.Tx
+	var res *UsersSearch
+	var messageId string
+	var friendship *[]string
+
+	//Message id
+	messageId, err = generateId()
+	if err != nil {
+		goto retErr
+	}
+
+	// Get receiver id
+	res, err = c.GetUserAPI(chat.Receiver)
+	if err != nil || len(*res) != 0 {
+		goto retErr
+	}
+
+	// Get friendship id
+	friendship, err = c.GetFriendshipByIds((*res)[0], string(userId))
+
+	// Create transaction
+	tx, err = c.db.Begin()
+
+	if err != nil {
+		goto retErr
+	}
+
+	// Prepare delete statement
+	stmt, err = tx.Prepare(
+		`
+	INSERT INTO messages (id, friendId, senderId, message) VALUES (?,?,?,?);
+	`,
+	)
+
+	if err != nil {
+		goto retErr
+	}
+	defer stmt.Close()
+
+	// Execute statement
+	_, err = stmt.Exec(
+		messageId,
+		(*friendship)[0],
+		userId,
+		chat.Text,
+	)
+
+	if err != nil {
+		goto rollback
+	}
+
+	err = tx.Commit()
+
+	if err != nil {
+		goto rollback
+	}
+
+	return friendship, nil
+
+	// Cleanup
+rollback:
+	{
+		tx.Rollback()
+	}
+retErr:
+	{
+		fmt.Println(err)
+		return nil, err
+	}
+
+}
+
 func (c *DBConn) GetAllUserContent(k apiKey) (*UserContent, error) {
 
 	var err error
@@ -775,7 +996,7 @@ func (c *DBConn) GetAllUserContent(k apiKey) (*UserContent, error) {
 		}
 		friends = append(friends, Friend{
 			Username: result.username,
-			Active:   false,
+			Active:   result.active,
 			Message:  result.message,
 		})
 	}
@@ -847,18 +1068,28 @@ func (c *DBConn) GetAllUserContent(k apiKey) (*UserContent, error) {
 		for rows.Next() {
 			var messageId string
 			var friendshipId string
+			var senderId string
 			var message string
 			var date string
+			var sender string
 
-			if err := rows.Scan(&messageId, &friendshipId, &message, &date); err != nil {
+			if err := rows.Scan(&messageId, &friendshipId, &senderId, &message, &date); err != nil {
 				continue
 			}
 
 			friendName := UserMap[apiKey(friendId)].username
 
+			if senderId == string(k) {
+				result, _ := UserMap[k]
+				sender = result.username
+			} else {
+				sender = friendName
+			}
+
 			messages[friendName] = append(messages[friendName], Message{
-				Text: message,
-				Date: date,
+				Text:   message,
+				Date:   date,
+				Sender: sender,
 			})
 
 		}
@@ -934,7 +1165,7 @@ func (c *DBConn) GetAllFriendsContent(k apiKey) (*UserContent, error) {
 		}
 		friends = append(friends, Friend{
 			Username: result.username,
-			Active:   false,
+			Active:   result.active,
 			Message:  result.message,
 		})
 	}
@@ -1072,7 +1303,6 @@ CREATE TABLE IF NOT EXISTS friends (
 	user2 TEXT NOT NULL,
 	FOREIGN KEY(user1) REFERENCES users(id) ON DELETE CASCADE,
 	FOREIGN KEY(user2) REFERENCES users(id) ON DELETE CASCADE,
-	CHECK (user1 < user2),
 	UNIQUE(user1, user2)
 );
 `
@@ -1081,6 +1311,7 @@ var messagesTable = `
 	CREATE TABLE IF NOT EXISTS messages (
 	id TEXT NOT NULL PRIMARY KEY,
 	friendId TEXT NOT NULL,
+	senderId TEXT NOT NULL,
 	message TEXT, 
 	date DATETIME DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(friendId)  REFERENCES friends(id)

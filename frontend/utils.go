@@ -107,11 +107,17 @@ func PromptFlow(ctx context.Context, code MessageCode, order *Questions, m strin
 			Code:    AttemptLogin,
 		}
 
-	case SearchUsers:
+	case SearchUsers, SearchUsersResults:
 		aMess = AppMessage{
 			Message: "Search users",
 			Payload: nil,
 			Code:    SearchUsers,
+		}
+	case SendMessage:
+		aMess = AppMessage{
+			Message: "Send Message",
+			Payload: nil,
+			Code:    SendMessage,
 		}
 
 	}

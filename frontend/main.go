@@ -53,11 +53,41 @@ func (a *AppMessage) EncodePayload(p interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
+	case SendMessage:
+		// P is LoginDetails type
+		if result, ok := p.(*Chat); ok {
+
+			jsonData, err := json.Marshal(*result)
+
+			if err != nil {
+				return err
+			}
+
+			a.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
 	case FriendRequest:
 		// P is LoginDetails type
 		if result, ok := p.(*string); ok {
 
 			jsonData, err := json.Marshal(*result)
+
+			if err != nil {
+				return err
+			}
+
+			a.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case OpenChat:
+		// P is LoginDetails type
+		if result, ok := p.(string); ok {
+
+			jsonData, err := json.Marshal(result)
 
 			if err != nil {
 				return err
@@ -113,6 +143,21 @@ func (a *AppMessage) EncodePayload(p interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
+	case ReceiveMessage:
+		// P is LoginDetails type
+		if result, ok := p.(*Message); ok {
+
+			jsonData, err := json.Marshal(result)
+
+			if err != nil {
+				return err
+			}
+
+			a.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
 
 	}
 
@@ -140,6 +185,32 @@ func (a *AppMessage) DecodePayload(target interface{}) error {
 	case SearchUsers:
 		// P is LoginDetails type
 		if _, ok := target.(string); ok {
+
+			err := json.Unmarshal(a.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case OpenChat:
+		// P is LoginDetails type
+		if _, ok := target.(string); ok {
+
+			err := json.Unmarshal(a.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case SendMessage:
+		// P is LoginDetails type
+		if _, ok := target.(*Chat); ok {
 
 			err := json.Unmarshal(a.Payload, target)
 
@@ -215,6 +286,19 @@ func (a *AppMessage) DecodePayload(target interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
+	case ReceiveMessage:
+		// P is LoginDetails type
+		if _, ok := target.(*Message); ok {
+
+			err := json.Unmarshal(a.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
 
 	}
 
@@ -227,6 +311,8 @@ type appState struct {
 	connected bool
 	// Logged in message from the backend
 	loggedIn bool
+
+	username string
 
 	// Channels between networking and UI portion
 
@@ -287,6 +373,15 @@ func (m *appState) AssignFriendshipContent(u *UserContent) error {
 
 	m.friends = u.Friends
 	m.friendRequests = u.FriendRequests
+	return nil
+
+}
+
+func (m *appState) AppendMessage(u *Message) error {
+	m.rwmu.Lock()
+	defer m.rwmu.Unlock()
+
+	m.messages[u.Receiver] = append(m.messages[u.Receiver], *u)
 	return nil
 
 }
@@ -360,7 +455,7 @@ func main() {
 	app := tview.NewApplication()
 
 	myAppState := NewAppState(app)
-	// go logger(myAppState)
+	go logger(myAppState)
 
 	// Mnage intra-app messages
 	go messageBroker(myAppState)
@@ -387,7 +482,7 @@ func main() {
 
 func logger(s *appState) {
 	// Choose a known TTY path (you need to know this or find it dynamically)
-	ttyPath := "/dev/pts/0" // Change this to your actual terminal device!
+	ttyPath := "/dev/pts/1" // Change this to your actual terminal device!
 
 	// Open that terminal's device file
 	tty, err := os.OpenFile(ttyPath, os.O_WRONLY, 0600)

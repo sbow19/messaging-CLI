@@ -86,7 +86,9 @@ func NewGamesView(s *appState) IOPrimitive {
 	})
 
 	// Snake game view
-	snake := NewSnakeScreen(s)
+	var snake *tview.Table
+
+	snake = NewSnakeScreen(s)
 
 	//
 	gamePages.AddPage("List", list, true, true)
@@ -101,6 +103,11 @@ func NewGamesView(s *appState) IOPrimitive {
 				Payload: nil,
 				Message: "",
 			}
+
+			gamePages.RemovePage("Snake")
+			snake = NewSnakeScreen(s)
+			gamePages.AddPage("Snake", NewSnakeScreen(s), true, false)
+
 			return nil
 		}
 		return event
@@ -366,7 +373,7 @@ func NewSnakeScreen(state *appState) *tview.Table {
 						state.UIBroadcast <- &AppMessage{
 							Code:    GameStart,
 							Payload: nil,
-							Message: "",
+							Message: fmt.Sprintf("Points: %d", points),
 						}
 					} else {
 						state.UIBroadcast <- &AppMessage{

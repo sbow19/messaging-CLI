@@ -39,6 +39,9 @@ const (
 	FriendAccept
 	FriendAcceptResult
 	UpdateFriendContent
+	OpenChat
+	SendMessage
+	ReceiveMessage
 )
 
 type AuthResponse struct {
@@ -151,6 +154,21 @@ func (m *ClientResponse) EncodePayload(p interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
+	case ReceiveMessage:
+		// P is LoginDetails type
+		if result, ok := p.(*Message); ok {
+
+			jsonData, err := json.Marshal(result)
+
+			if err != nil {
+				return err
+			}
+
+			m.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
 
 	}
 
@@ -227,6 +245,32 @@ func (m *ClientResponse) DecodePayload(target interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
+	case SendMessage:
+		// P is LoginDetails type
+		if _, ok := target.(*Chat); ok {
+
+			err := json.Unmarshal(m.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case ReceiveMessage:
+		// P is LoginDetails type
+		if _, ok := target.(*Message); ok {
+
+			err := json.Unmarshal(m.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
 
 	}
 
@@ -261,6 +305,21 @@ func (m *ClientMessage) EncodePayload(p interface{}) error {
 	case FriendAccept:
 		// P is LoginDetails type
 		if result, ok := p.(*FriendAcceptData); ok {
+
+			jsonData, err := json.Marshal(result)
+
+			if err != nil {
+				return err
+			}
+
+			m.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case SendMessage:
+		// P is LoginDetails type
+		if result, ok := p.(*Chat); ok {
 
 			jsonData, err := json.Marshal(result)
 
@@ -323,6 +382,19 @@ func (m *ClientMessage) DecodePayload(target interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
+	case SendMessage:
+		// P is LoginDetails type
+		if _, ok := target.(*Chat); ok {
+
+			err := json.Unmarshal(m.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
 
 	}
 
@@ -336,4 +408,10 @@ func (c ClientMessage) GetPayload() json.RawMessage {
 type FriendAcceptData struct {
 	Accept    bool   `json:"accept"`
 	RequestId string `json:"request_id"`
+}
+
+type Chat struct {
+	Text     string `json:"text"`
+	Sender   string `json:"sender"`
+	Receiver string `json:"receiver"`
 }

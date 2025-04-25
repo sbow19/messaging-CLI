@@ -180,16 +180,29 @@ func MainScreenPages(s *appState) IOPrimitive {
 
 	pages := tview.NewPages()
 
+	// About page
+	text := NewAboutPage()
+
+	// Games page
+	games := NewGamesView(s)
+
+	// Friends page - implements Search for new friends
+	friends := FriendsPages(s)
+
 	// Front page
 	list := tview.NewList().
 		AddItem("About", "Learn more about this project", 'h', func() {
 			pages.SwitchToPage("About")
+			s.app.SetFocus(text)
+
 		}).
 		AddItem("Friends", "Look for friends and chat", 'f', func() {
 			pages.SwitchToPage("Friends")
+			s.app.SetFocus(friends.GetPrim())
 		}).
 		AddItem("Games", "Play some terminal games", 'g', func() {
 			pages.SwitchToPage("Games")
+			s.app.SetFocus(games.GetPrim())
 
 		}).
 		AddItem("Exit", "End session (ctrl+c at any time)", 'x', func() {
@@ -224,15 +237,6 @@ func MainScreenPages(s *appState) IOPrimitive {
 	})
 
 	frontFlex.SetBorderPadding(0, 0, 0, 0)
-
-	// About page
-	text := NewAboutPage()
-
-	// Games page
-	games := NewGamesView(s)
-
-	// Friends page - implements Search for new friends
-	friends := FriendsPages(s)
 
 	// Configuring pages behavior
 	pages.AddPage("Home", list, true, true)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/gdamore/tcell/v2"
@@ -22,9 +23,29 @@ func (f *FriendsBarPrimitive) GetPrim() tview.Primitive {
 	return f.prim
 }
 
-func NotificationBoxFac() *tview.Frame {
+func NotificationBoxFac(m *Message, UIBroadcast chan *AppMessage) *tview.Frame {
+
+	txt := tview.NewTextView()
+	txt.SetText(fmt.Sprintf("%v: %v    sent ", m.Sender, m.Text, m.Date))
+
+	txt.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Rune() {
+		case 'y':
+			// Send app message to
+			appMess := AppMessage{
+				Code:    OpenChat,
+				Payload: nil,
+			}
+
+			appMess.EncodePayload(m.Sender)
+
+			UIBroadcast <- &appMess
+			return nil
+		}
+		return event
+	})
 	frame := tview.NewFrame(
-		tview.NewFlex(),
+		txt,
 	)
 	frame.SetBorderPadding(0, 0, 0, 0)
 	frame.SetBorder(true)
@@ -32,30 +53,39 @@ func NotificationBoxFac() *tview.Frame {
 	return frame
 }
 
+// Track messages on side bar an trigger conversation pane
 func NotificationsBar(s *appState) IOPrimitive {
 
-	// Indicator bar
-	bar := tview.NewBox().SetBackgroundColor(tcell.Color101)
+	// Friends bar --> Add friends to list
+	grid := tview.NewGrid().SetGap(0, 0).SetMinSize(5, 5)
+	grid.SetBorderPadding(0, 0, 0, 0).SetBorder(true)
 
-	// Friends bar --> Add friends to list. TODO: scrollable?
-	// Possibly paginate when clicking up and down arrows
-	// Dynamically render when new friends message
-	grid := tview.NewGrid().SetGap(0, 0).SetSize(1, 1, 1, 1)
-	grid.SetBorderPadding(0, 0, 0, 0)
-	grid.AddItem(
-		NotificationBoxFac(), 1, 1, 1, 1, 1, 1, false,
-	).AddItem(
-		NotificationBoxFac(), 2, 1, 1, 1, 0, 0, false,
-	).AddItem(
-		NotificationBoxFac(), 3, 1, 1, 1, 0, 0, false,
-	).AddItem(
-		NotificationBoxFac(), 4, 1, 1, 1, 0, 0, false,
-	).AddItem(
-		NotificationBoxFac(), 5, 1, 1, 1, 0, 0, false,
-	).AddItem(
-		bar, 6, 1, 1, 1, 0, 0, false,
-	)
-	grid.SetBorder(true)
+	resultsArr := []*tview.Frame{}
+	hasFocus := 0
+	grid.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+
+		switch event.Key() {
+
+		case tcell.KeyUp:
+
+			if hasFocus-1 >= 0 {
+				hasFocus -= 1
+				s.app.SetFocus(resultsArr[hasFocus])
+			}
+
+			return nil
+
+		case tcell.KeyDown:
+
+			if hasFocus+1 < len(resultsArr) {
+				hasFocus += 1
+				s.app.SetFocus(resultsArr[hasFocus])
+			}
+			return nil
+
+		}
+		return event
+	})
 
 	uiCh := UIChannels{
 		RecUIMess:      make(chan *AppMessage, 3),
@@ -83,6 +113,35 @@ func NotificationsBar(s *appState) IOPrimitive {
 			select {
 			case m := <-friendBar.RecUIMess:
 				switch m.Code {
+
+				case ReceiveMessage:
+					var message Message
+
+					err := m.DecodePayload(&message)
+
+					if err != nil {
+						return
+					}
+
+					// Create msg notification box
+					resultsArr = resultsArr[1:]
+					notifBox := NotificationBoxFac(&message, friendBar.UIMessage)
+					resultsArr = append(resultsArr, notifBox)
+
+					// Clear Grid and re add messages. 5 Recent notifications
+					for _, p := range resultsArr {
+						grid.RemoveItem(p)
+					}
+					for i, n := range resultsArr {
+						n.SetFocusFunc(func() {
+							hasFocus = i
+						})
+						grid.AddItem(n, i, 0, 1, 1, 1, 1, false)
+					}
+
+					hasFocus = 0
+					s.app.SetFocus(resultsArr[0])
+
 				default:
 					/*Do nothing*/
 				}

@@ -44,11 +44,10 @@ func main() {
 	})
 
 	// Get all users --> prints out to txt file
-	go dbConn.GetAllUsers()
+	go dbConn.GetAll()
 
 	//Listen for app wide messages, e.g. for broadcasting to multiple clients
-	com := make(chan *BackendMessage)
-	go AppListener(com, wsServer)
+	go AppListener(wsServer)
 
 	// Start server on PORT
 	fmt.Println("HTTP server started at http://localhost:8000")

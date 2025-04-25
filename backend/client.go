@@ -82,6 +82,7 @@ func (c *clientData) SetNewLogin(l *LoginDetails, k apiKey) *RequestError {
 		apiKey:      c.apiKey,
 		active:      c.active,
 		err:         c.err,
+		username:    l.Username,
 		loginDetails: LoginDetails{
 			Username: l.Username,
 			Password: l.Password,
@@ -105,6 +106,8 @@ func (c *clientData) SetNewLogin(l *LoginDetails, k apiKey) *RequestError {
 	// Set user to logged in an active on first time
 	c.loggedIn = true
 	c.active = true
+	c.username = clientCopy.username
+	c.message = clientCopy.message
 
 	return nil
 }
