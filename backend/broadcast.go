@@ -60,7 +60,7 @@ func AppListener(s *Server) {
 				// First user id is always the requesting user
 				// Second user id is always the receiving user
 				go SendChatData((*chatBroadcast.Friendship)[1], chatBroadcast.Chat, s)
-				go SendChatData((*chatBroadcast.Friendship)[1], chatBroadcast.Chat, s)
+				go SendChatData((*chatBroadcast.Friendship)[2], chatBroadcast.Chat, s)
 			}
 		default:
 			// Do nothing
@@ -111,6 +111,7 @@ func SendFriendshipData(u string, s *Server) {
 func SendChatData(u string, chat *Message, s *Server) {
 
 	res, _ := UserMap[apiKey(u)]
+
 	if res.loggedIn {
 		// Generate client response
 		clientResp := ClientResponse{

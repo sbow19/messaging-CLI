@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -427,6 +428,7 @@ func (c *DBConn) GetUserAPI(s string) (*UsersSearch, error) {
 			goto retErr
 		}
 		outputUsers = append(outputUsers, id)
+
 	}
 	return &outputUsers, nil
 
@@ -612,6 +614,7 @@ func (c *DBConn) GetFriendshipByIds(id1 string, id2 string) (*[]string, error) {
 		}
 		output = append(output, friendshipId, user1, user2)
 	}
+
 	return &output, nil
 
 retErr:
@@ -654,7 +657,7 @@ func (c *DBConn) SetFriendRequest(name string, reqId string) (string, error) {
 	}
 
 	if len(*userSearch) > 0 {
-		return "", fmt.Errorf("friend request already exists")
+		return (*userSearch)[0], fmt.Errorf("friend request already exists")
 	}
 
 	//Friend request id
@@ -874,6 +877,7 @@ func (c *DBConn) SaveMessage(chat *Chat, userId apiKey) (*[]string, error) {
 	var res *UsersSearch
 	var messageId string
 	var friendship *[]string
+	var id1 string
 
 	//Message id
 	messageId, err = generateId()
@@ -883,12 +887,14 @@ func (c *DBConn) SaveMessage(chat *Chat, userId apiKey) (*[]string, error) {
 
 	// Get receiver id
 	res, err = c.GetUserAPI(chat.Receiver)
-	if err != nil || len(*res) != 0 {
+
+	if err != nil || len(*res) == 0 {
 		goto retErr
 	}
 
+	id1 = (*res)[0]
 	// Get friendship id
-	friendship, err = c.GetFriendshipByIds((*res)[0], string(userId))
+	friendship, err = c.GetFriendshipByIds(id1, string(userId))
 
 	// Create transaction
 	tx, err = c.db.Begin()
@@ -1060,6 +1066,9 @@ func (c *DBConn) GetAllUserContent(k apiKey) (*UserContent, error) {
 			`, friendshipId,
 		)
 
+		friendName := UserMap[apiKey(friendId)].username
+		messages[friendName] = []Message{}
+
 		if err != nil {
 			continue
 		}
@@ -1077,8 +1086,6 @@ func (c *DBConn) GetAllUserContent(k apiKey) (*UserContent, error) {
 				continue
 			}
 
-			friendName := UserMap[apiKey(friendId)].username
-
 			if senderId == string(k) {
 				result, _ := UserMap[k]
 				sender = result.username
@@ -1086,9 +1093,19 @@ func (c *DBConn) GetAllUserContent(k apiKey) (*UserContent, error) {
 				sender = friendName
 			}
 
+			// Parse it using the correct layout
+			t, err := time.Parse(time.RFC3339, date)
+			if err != nil {
+				panic(err)
+			}
+
+			// Convert to your desired format
+			layout := "2006-01-02 15:04"
+			formatted := t.Format(layout)
+
 			messages[friendName] = append(messages[friendName], Message{
 				Text:   message,
-				Date:   date,
+				Date:   formatted,
 				Sender: sender,
 			})
 

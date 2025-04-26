@@ -23,10 +23,22 @@ func (f *FriendsBarPrimitive) GetPrim() tview.Primitive {
 	return f.prim
 }
 
+func BlankBox() *tview.Frame {
+	txt := tview.NewTextView()
+	frame := tview.NewFrame(
+		txt,
+	)
+	frame.SetBorderPadding(0, 0, 0, 0)
+	frame.SetBorder(true)
+
+	return frame
+
+}
+
 func NotificationBoxFac(m *Message, UIBroadcast chan *AppMessage) *tview.Frame {
 
 	txt := tview.NewTextView()
-	txt.SetText(fmt.Sprintf("%v: %v    sent ", m.Sender, m.Text, m.Date))
+	txt.SetText(fmt.Sprintf("%v: %v    sent: %v ", m.Sender, m.Text, m.Date))
 
 	txt.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
@@ -103,7 +115,12 @@ func NotificationsBar(s *appState) IOPrimitive {
 	err := s.SubscribeChannel(friendBar.RecUIMess, UI)
 
 	if err != nil {
+		log.Println(err)
 		log.Fatal(err)
+	}
+
+	for i := 0; i < 5; i++ {
+		resultsArr = append(resultsArr, BlankBox())
 	}
 
 	// Listen to UI broadcasts
@@ -123,8 +140,15 @@ func NotificationsBar(s *appState) IOPrimitive {
 						return
 					}
 
+					if message.Sender == s.username {
+						break
+					}
+
 					// Create msg notification box
-					resultsArr = resultsArr[1:]
+					if len(resultsArr) == 5 {
+						resultsArr = resultsArr[1:]
+
+					}
 					notifBox := NotificationBoxFac(&message, friendBar.UIMessage)
 					resultsArr = append(resultsArr, notifBox)
 

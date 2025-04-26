@@ -116,10 +116,15 @@ func NewGamesView(s *appState) IOPrimitive {
 	// Register primitive with UI broadcast handler
 	err := s.SubscribeChannel(games.RecUIMess, UI)
 
+	if err != nil {
+		log.Println("Cannot subscribe games to Broadcast")
+		log.Fatal("Cannot subscribe games to Broadcast")
+	}
 	go func() {
 		for {
 			select {
 			case m := <-games.RecUIMess:
+
 				switch m.Code {
 				// Some error with connection
 				case AttemptLogin:
@@ -137,10 +142,6 @@ func NewGamesView(s *appState) IOPrimitive {
 			}
 		}
 	}()
-
-	if err != nil {
-		log.Fatal("Cannot subscribe games to Broadcast")
-	}
 
 	return &games
 

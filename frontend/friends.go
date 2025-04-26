@@ -120,6 +120,8 @@ func FriendsPages(s *appState) IOPrimitive {
 		log.Fatal(err)
 	}
 
+	var screen *ChatScreenPrimitive
+
 	// Listen to UI broadcasts
 	go func() {
 
@@ -136,14 +138,20 @@ func FriendsPages(s *appState) IOPrimitive {
 					chatLog, ok := s.messages[username]
 
 					if !ok {
-						return
+						// Add user to message
+						s.AddUserChat(username)
+					}
+
+					if screen != nil {
+						s.UnsubscribeChannel(screen.RecUIMess, UI)
 					}
 
 					// Create new chat screen with content
 					pages.RemovePage("Chat")
 
-					c := ChatScreen(s, &chatLog)
-					pages.AddAndSwitchToPage("Chat", c.GetPrim(), true)
+					screen = ChatScreen(s, &chatLog, username)
+
+					pages.AddAndSwitchToPage("Chat", screen.GetPrim(), true)
 
 				default:
 					// Do nothing
@@ -167,10 +175,10 @@ Focusses on input to prompt search.
 Type y to add or n to decline. Send a message for a request.
 
 1) Type usernames and prompt backend for search results -- DONE
-2) Display list of users in scrollable view
+2) Display list of users in scrollable view -- DONE
 3) Displays username and some text as a bio
 4) click to prompt user to add or not
-5) If add, send friend request. Backen keeps track of friend requests etc
+5) If add, send friend request. Backen keeps track of friend requests etc -- DONE
 6) If other user accepts, the backend receives this and forwards on the successful add
 7) If rejected, then the user will be notified of failure of friend request
 */
@@ -442,6 +450,7 @@ func FriendsScreen(s *appState) IOPrimitive {
 				switch m.Code {
 				case AllContent:
 					// Set header
+
 					for _, p := range resultsArr {
 						grid.RemoveItem(p)
 					}
@@ -455,6 +464,9 @@ func FriendsScreen(s *appState) IOPrimitive {
 					}
 
 					hasFocus = 0
+					if len(resultsArr) == 0 {
+						break
+					}
 					s.app.SetFocus(resultsArr[0])
 				case UpdateFriendContent:
 					// Set header
@@ -472,6 +484,10 @@ func FriendsScreen(s *appState) IOPrimitive {
 					}
 
 					hasFocus = 0
+
+					if len(resultsArr) == 0 {
+						break
+					}
 					s.app.SetFocus(resultsArr[0])
 
 				default:
@@ -628,6 +644,7 @@ func PendingScreen(s *appState) IOPrimitive {
 				switch m.Code {
 				case UpdateFriendContent:
 					hasFocus = 0
+
 					// Set header
 					for _, p := range resultsArr {
 						grid.RemoveItem(p)
@@ -643,11 +660,15 @@ func PendingScreen(s *appState) IOPrimitive {
 					}
 
 					hasFocus = 0
+					if len(resultsArr) == 0 {
+						break
+					}
 					s.app.SetFocus(resultsArr[0])
 
 				case AllContent:
 
 					hasFocus = 0
+
 					// Set header
 					for _, p := range resultsArr {
 						grid.RemoveItem(p)
@@ -663,6 +684,9 @@ func PendingScreen(s *appState) IOPrimitive {
 					}
 
 					hasFocus = 0
+					if len(resultsArr) == 0 {
+						break
+					}
 					s.app.SetFocus(resultsArr[0])
 				default:
 					// Do nothing
@@ -693,9 +717,10 @@ func (f *ChatScreenPrimitive) GetPrim() tview.Primitive {
 	return f.prim
 }
 
-func ChatScreen(s *appState, chatLog *[]Message) IOPrimitive {
+func ChatScreen(s *appState, chatLog *[]Message, username string) *ChatScreenPrimitive {
 	txt := tview.NewTextView()
 	txt.SetBorder(true)
+	txt.SetTitle(fmt.Sprintf("You are chatting with %v", username))
 
 	uiCh := UIChannels{
 		RecUIMess:      make(chan *AppMessage, 3),
@@ -716,11 +741,14 @@ func ChatScreen(s *appState, chatLog *[]Message) IOPrimitive {
 		log.Fatal(err)
 	}
 
-	log := ""
+	logs := ""
+
 	for _, c := range *chatLog {
-		log += fmt.Sprintf("%v: %q\n", c.Date, c.Text)
+		logs += fmt.Sprintf("%v: %v    Sent: %v\n\n", c.Sender, c.Text, c.Date)
 	}
-	txt.SetText(log)
+	txt.SetText(logs)
+
+	txt.ScrollToEnd()
 
 	// Listen to UI broadcasts
 	go func() {
@@ -731,6 +759,17 @@ func ChatScreen(s *appState, chatLog *[]Message) IOPrimitive {
 
 				switch m.Code {
 				// Wait for new text to appear
+				case ReceiveMessage:
+					var message Message
+
+					err := m.DecodePayload(&message)
+					if err != nil {
+						break
+					}
+
+					logs += fmt.Sprintf("%v: %q    Sent: %v\n\n", message.Sender, message.Text, message.Date)
+					txt.SetText(logs)
+					txt.ScrollToEnd()
 
 				default:
 					//Do nothing

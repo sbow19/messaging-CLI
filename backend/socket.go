@@ -6,7 +6,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
 
@@ -476,30 +475,22 @@ func (s *Server) readLoop(ws *websocket.Conn, k apiKey) {
 				log.Fatal(err)
 			}
 
+			if chat.Receiver == "" {
+				break
+			}
+
 			// Save message in database
 			friendship, err = dbConn.SaveMessage(&chat, k)
 
-			// Sneder name
-			result, ok := UserMap[k]
-
-			if !ok {
-				log.Fatal("Obtaining sender name from UserMap failed")
-
-			}
-
 			layout := "2006-01-02 15:04"
-			t, err := time.Parse(layout, "2025-05-10 15:24")
-			if err != nil {
-				panic(err)
-			}
-
-			timestampStr := strconv.FormatInt(t.UnixMilli(), 10)
+			nowUTC := time.Now().UTC()
+			formatted := nowUTC.Format(layout)
 
 			message = Message{
 				Text:     chat.Text,
-				Date:     timestampStr,
+				Date:     formatted,
 				Receiver: chat.Receiver,
-				Sender:   result.username,
+				Sender:   chat.Sender,
 			}
 
 			if err != nil {

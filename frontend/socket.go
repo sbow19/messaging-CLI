@@ -294,6 +294,7 @@ readLoop:
 					Code:    message.Code,
 					Payload: message.Payload,
 				}
+
 				// Send message
 				c.SendMessage(&clientMess)
 

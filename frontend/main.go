@@ -197,7 +197,7 @@ func (a *AppMessage) DecodePayload(target interface{}) error {
 		}
 	case OpenChat:
 		// P is LoginDetails type
-		if _, ok := target.(string); ok {
+		if _, ok := target.(*string); ok {
 
 			err := json.Unmarshal(a.Payload, target)
 
@@ -347,6 +347,8 @@ func NewAppState(app *tview.Application) *appState {
 		networkBroadcast:     make(chan *AppMessage),
 		networkSubscriptions: []chan *AppMessage{},
 
+		username: "",
+
 		UIBroadcast:     make(chan *AppMessage),
 		UISubscriptions: []chan *AppMessage{},
 
@@ -386,6 +388,15 @@ func (m *appState) AppendMessage(u *Message) error {
 
 }
 
+func (m *appState) AddUserChat(u string) error {
+	m.rwmu.Lock()
+	defer m.rwmu.Unlock()
+
+	m.messages[u] = []Message{}
+	return nil
+
+}
+
 func (m *appState) OpenConnection() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -414,6 +425,15 @@ func (m *appState) SetLoggedIn() error {
 	if !m.loggedIn {
 		m.loggedIn = true
 	}
+
+	return nil
+}
+
+func (m *appState) SetUsername(u string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.username = u
 
 	return nil
 }
@@ -451,6 +471,31 @@ func (m *appState) SubscribeChannel(c chan *AppMessage, t BroadcastTypes) error 
 	return nil
 }
 
+func (m *appState) UnsubscribeChannel(c chan *AppMessage, t BroadcastTypes) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	switch t {
+	case UI:
+		filtered := m.UISubscriptions[:0] // reuse the original slice memory
+		for _, v := range m.UISubscriptions {
+			if v != c {
+				filtered = append(filtered, v)
+			}
+		}
+	case Network:
+		// Listeners for messages intended for network part
+		filtered := m.networkSubscriptions[:0] // reuse the original slice memory
+		for _, v := range m.networkSubscriptions {
+			if v != c {
+				filtered = append(filtered, v)
+			}
+		}
+	}
+
+	return nil
+}
+
 func main() {
 	app := tview.NewApplication()
 
@@ -482,7 +527,7 @@ func main() {
 
 func logger(s *appState) {
 	// Choose a known TTY path (you need to know this or find it dynamically)
-	ttyPath := "/dev/pts/1" // Change this to your actual terminal device!
+	ttyPath := "/dev/pts/0" // Change this to your actual terminal device!
 
 	// Open that terminal's device file
 	tty, err := os.OpenFile(ttyPath, os.O_WRONLY, 0600)
@@ -507,8 +552,9 @@ func messageBroker(s *appState) {
 		select {
 		case m := <-s.UIBroadcast:
 
-			for _, sub := range s.UISubscriptions {
+			for i, sub := range s.UISubscriptions {
 
+				log.Println(i, m)
 				// Broadcast message on subscribed UI element
 				sub <- m
 			}

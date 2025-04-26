@@ -57,6 +57,10 @@ func InputBar(s *appState) IOPrimitive {
 
 	// Listen to UI broadcasts
 	go func() {
+
+		//User to chat ith
+		usr := ""
+
 		for {
 			select {
 			case m := <-input.RecUIMess:
@@ -83,6 +87,7 @@ func InputBar(s *appState) IOPrimitive {
 							q: "Please type your username",
 							ref: func(input string) {
 								loginDetails.Username = input
+								s.SetUsername(input)
 							},
 						},
 						&Question{
@@ -125,7 +130,7 @@ func InputBar(s *appState) IOPrimitive {
 					input.prim.Clear()
 					textarea.SetText("", false)
 
-				case OpenChat, ReceiveMessage:
+				case OpenChat:
 					// Cancel any previous prompt
 					if cancelPrompt != nil {
 						cancelPrompt()
@@ -139,12 +144,41 @@ func InputBar(s *appState) IOPrimitive {
 					ctx, cancelPrompt = context.WithCancel(context.Background())
 
 					//Message object
-					usr := ""
-					m.DecodePayload(usr)
+					m.DecodePayload(&usr)
 					chat := Chat{
 						Text:     "",
 						Receiver: usr,
-						Sender:   "",
+						Sender:   s.username,
+					}
+
+					questions := Questions{
+						&Question{
+							q: "Type to chat",
+							ref: func(input string) {
+								chat.Text = input
+							},
+						},
+					}
+					go PromptFlow(ctx, SendMessage, &questions, m.Message, textarea, input.NetworkMessage, input.prim, &chat)
+
+				case ReceiveMessage:
+					// Cancel any previous prompt
+					if cancelPrompt != nil {
+						cancelPrompt()
+					}
+
+					input.prim.Clear()
+					textarea.SetText("", false)
+
+					// Create a new context for this message
+					var ctx context.Context
+					ctx, cancelPrompt = context.WithCancel(context.Background())
+
+					//Message object
+					chat := Chat{
+						Text:     "",
+						Receiver: usr,
+						Sender:   s.username,
 					}
 
 					questions := Questions{
