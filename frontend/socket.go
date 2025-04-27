@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 
@@ -41,10 +42,26 @@ func NewConnection(ws *websocket.Conn, c chan *AppMessage) *conn {
 }
 
 // Establish connection with backend and create message channel
-func dialBackend(state *appState) {
+func dialBackend(state *appState, addr net.Addr) {
 	// Prepare a custom WebSocket config
-	origin := "ws://localhost:8000/"
-	config, err := websocket.NewConfig(origin, "http://localhost/")
+	var ip string
+	switch v := addr.(type) {
+	case *net.TCPAddr:
+		ip = v.IP.String() // Extract the IP address
+	case *net.UDPAddr:
+		ip = v.IP.String() // Extract the IP address
+	default:
+		log.Fatalf("Unsupported address type: %T", v)
+	}
+
+	// Manually assign the port (e.g., 8000)
+	port := 8000
+
+	// Prepare a custom WebSocket config
+	origin := fmt.Sprintf("ws://%s:%d/", ip, port)
+	config, err := websocket.NewConfig(
+		origin,
+		fmt.Sprintf("http://%s:%d/", ip, port)) // Use the correct format
 	if err != nil {
 		log.Fatalf("Failed to create config: %v", err)
 	}
@@ -82,6 +99,7 @@ func dialBackend(state *appState) {
 	conn, err := websocket.DialConfig(config)
 	if err != nil {
 		// Send UI message
+		log.Println(err)
 		aMess := AppMessage{
 			Code:    ConnectionError,
 			Message: "Error connecting to server",
@@ -384,4 +402,34 @@ func (c *conn) SendMessage(m *ClientMessage) {
 	if e := websocket.JSON.Send(c.ws, m); e != nil {
 		c.done <- struct{}{}
 	}
+}
+
+func ListenForBroadcast(myAppState *appState) {
+
+	pc, err := net.ListenPacket("udp4", ":9999")
+	if err != nil {
+		panic(err)
+	}
+	defer pc.Close()
+
+	buf := make([]byte, 1024)
+	for {
+
+		//
+		n, addr, err := pc.ReadFrom(buf)
+		if err != nil {
+			panic(err)
+		}
+
+		log.Printf("%s sent this: %s\n", addr, buf[:n])
+
+		go func() {
+			// Blocks until connection is lost, then retry takes place
+			dialBackend(myAppState, addr)
+		}()
+
+		// End loop. Read li
+		<-myAppState.done
+	}
+
 }

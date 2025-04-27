@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/rivo/tview"
 )
@@ -552,21 +551,14 @@ func main() {
 	app := tview.NewApplication()
 
 	myAppState := NewAppState(app)
-	// go logger(myAppState)
+	go logger(myAppState)
 
 	// Mnage intra-app messages
 	go messageBroker(myAppState)
 	// Set up networking -->
-	// Connect ticker
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
 
-	go func() {
-		for range ticker.C {
-			// Blocks until it returns, then retry takes place
-			dialBackend(myAppState)
-		}
-	}()
+	go ListenForBroadcast(myAppState)
+
 	// Set up UI. Receive channels. Gene
 	flex := getUI(myAppState)
 

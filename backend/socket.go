@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -54,6 +55,36 @@ func (c *ClientConnection) SendOnConnection(m Response) *RequestError {
 }
 
 func NewServer() *Server {
+
+	// Broadcast to network for discovery
+	go func() {
+		var err error
+
+		// Get address to broadcast message
+		addr, err := net.ResolveUDPAddr("udp4", "192.168.0.255:9999")
+		if err != nil {
+			panic(err)
+		}
+
+		// Create a UDP connection to the broadcast address
+		conn, err := net.DialUDP("udp4", nil, addr)
+		if err != nil {
+			panic(err)
+		}
+		defer conn.Close()
+
+		message := []byte("CHAT CLI")
+		for {
+
+			_, err = conn.Write(message)
+			if err != nil {
+				panic(err)
+			}
+
+			time.Sleep(2 * time.Second)
+		}
+	}()
+
 	return &Server{
 		clients:   make(map[apiKey]*ClientConnection),
 		broadcast: make(chan *BackendMessage),
