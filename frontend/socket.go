@@ -277,6 +277,36 @@ readLoop:
 				appMessage.EncodePayload(user)
 
 				c.UIBroadcast <- &appMessage
+			case NotifyInactive:
+				var user string
+				var err error
+				err = response.DecodePayload(&user)
+
+				if err != nil {
+					log.Fatal(err)
+
+				}
+
+				// Update active status globally
+				err = state.SetFriendActiveStatus(
+					user,
+					false,
+				)
+
+				if err != nil {
+					log.Fatal(err)
+
+				}
+
+				appMessage := AppMessage{
+					Code:    NotifyInactive,
+					Message: "User logged in",
+					Payload: nil,
+				}
+
+				appMessage.EncodePayload(user)
+
+				c.UIBroadcast <- &appMessage
 
 			default:
 
@@ -338,6 +368,9 @@ readLoop:
 				Message: "Lost connection to server",
 			}
 			c.UIBroadcast <- &aMess
+
+			// Unsubscribe listener channel
+			state.UnsubscribeChannel(c.RecNetMess, Network)
 			break readLoop
 		}
 	}

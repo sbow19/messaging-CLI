@@ -85,7 +85,7 @@ func (a *AppMessage) EncodePayload(p interface{}) error {
 		}
 	case OpenChat:
 		// P is LoginDetails type
-		if result, ok := p.(string); ok {
+		if result, ok := p.(*Friend); ok {
 
 			jsonData, err := json.Marshal(result)
 
@@ -158,7 +158,7 @@ func (a *AppMessage) EncodePayload(p interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
-	case NotifyLogin:
+	case NotifyLogin, NotifyInactive:
 		// P is LoginDetails type
 		if result, ok := p.(string); ok {
 
@@ -212,7 +212,7 @@ func (a *AppMessage) DecodePayload(target interface{}) error {
 		}
 	case OpenChat:
 		// P is LoginDetails type
-		if _, ok := target.(*string); ok {
+		if _, ok := target.(*Friend); ok {
 
 			err := json.Unmarshal(a.Payload, target)
 
@@ -314,7 +314,7 @@ func (a *AppMessage) DecodePayload(target interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
-	case NotifyLogin:
+	case NotifyLogin, NotifyInactive:
 		// P is LoginDetails type
 		if _, ok := target.(*string); ok {
 
@@ -533,6 +533,7 @@ func (m *appState) UnsubscribeChannel(c chan *AppMessage, t BroadcastTypes) erro
 				filtered = append(filtered, v)
 			}
 		}
+		m.UISubscriptions = filtered
 	case Network:
 		// Listeners for messages intended for network part
 		filtered := m.networkSubscriptions[:0] // reuse the original slice memory
@@ -541,6 +542,7 @@ func (m *appState) UnsubscribeChannel(c chan *AppMessage, t BroadcastTypes) erro
 				filtered = append(filtered, v)
 			}
 		}
+		m.networkSubscriptions = filtered
 	}
 
 	return nil
@@ -550,7 +552,7 @@ func main() {
 	app := tview.NewApplication()
 
 	myAppState := NewAppState(app)
-	go logger(myAppState)
+	// go logger(myAppState)
 
 	// Mnage intra-app messages
 	go messageBroker(myAppState)
@@ -577,7 +579,7 @@ func main() {
 
 func logger(s *appState) {
 	// Choose a known TTY path (you need to know this or find it dynamically)
-	ttyPath := "/dev/pts/1" // Change this to your actual terminal device!
+	ttyPath := "/dev/pts/0" // Change this to your actual terminal device!
 
 	// Open that terminal's device file
 	tty, err := os.OpenFile(ttyPath, os.O_WRONLY, 0600)

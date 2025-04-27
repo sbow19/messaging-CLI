@@ -180,7 +180,6 @@ func NotificationsBar(s *appState) IOPrimitive {
 	err := s.SubscribeChannel(friendBar.RecUIMess, UI)
 
 	if err != nil {
-		log.Println(err)
 		log.Fatal(err)
 	}
 

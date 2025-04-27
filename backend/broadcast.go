@@ -12,6 +12,7 @@ const (
 	BroadcastFriendRequest
 	BroadcastChat
 	BroadcastLoggedIn
+	BroadcastLoggedOut
 )
 
 type BackendMessage struct {
@@ -47,6 +48,31 @@ func AppListener(s *Server) {
 				}
 
 			}
+		case BroadcastLoggedOut:
+			if userId, ok := message.Payload.(apiKey); ok {
+
+				// Get API key and get all friends in db
+				friendIds, err := dbConn.GetFriendsById(string(userId))
+				if err != nil {
+					fmt.Println(err)
+					break
+				}
+
+				res := UserMap[userId]
+
+				for _, id := range *friendIds {
+
+					fri := UserMap[apiKey(id)]
+
+					if !fri.loggedIn {
+						continue
+					}
+					go SendLoggedOut(id, res.username, s)
+
+				}
+
+			}
+
 		case BroadcastFriendship:
 			// handle friendship broadcast
 			if userIds, ok := message.Payload.(*[]string); ok {
@@ -90,7 +116,6 @@ func AppListener(s *Server) {
 			if chatBroadcast, ok := message.Payload.(*ChatBroadcast); ok {
 
 				if !ok {
-					fmt.Println("Error getting chat broadcast")
 					break
 				}
 
@@ -112,6 +137,32 @@ func SendLoggedIn(friendId string, user string, s *Server) {
 		Code:    NotifyLogin,
 		Err:     nil,
 		Message: "Friend logged in",
+		Payload: nil,
+	}
+
+	clientResp.EncodePayload(user)
+
+	jsonData, err := json.Marshal(&clientResp)
+
+	if err != nil {
+		return
+	}
+
+	_, errr := s.clients[apiKey(friendId)].conn.Write(jsonData)
+
+	if errr != nil {
+		fmt.Println(errr)
+		return
+	}
+}
+
+func SendLoggedOut(friendId string, user string, s *Server) {
+
+	// Generate client response
+	clientResp := ClientResponse{
+		Code:    NotifyInactive,
+		Err:     nil,
+		Message: "Friend logged out",
 		Payload: nil,
 	}
 

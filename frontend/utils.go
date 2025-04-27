@@ -61,6 +61,7 @@ func PromptFlow(ctx context.Context, code MessageCode, order *Questions, m strin
 		})
 		close(next)
 	}()
+
 	for i < len(*order) {
 
 		question := (*order)[i]

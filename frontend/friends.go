@@ -128,14 +128,14 @@ func FriendsPages(s *appState) IOPrimitive {
 				switch m.Code {
 				case OpenChat:
 					// Get chat details
-					var username string
-					m.DecodePayload(&username)
+					var friend Friend
+					m.DecodePayload(&friend)
 
-					chatLog, ok := s.messages[username]
+					chatLog, ok := s.messages[friend.Username]
 
 					if !ok {
 						// Add user to message
-						s.AddUserChat(username)
+						s.AddUserChat(friend.Username)
 					}
 
 					if screen != nil {
@@ -145,7 +145,7 @@ func FriendsPages(s *appState) IOPrimitive {
 					// Create new chat screen with content
 					pages.RemovePage("Chat")
 
-					screen = ChatScreen(s, &chatLog, username)
+					screen = ChatScreen(s, &chatLog, &friend)
 
 					pages.AddAndSwitchToPage("Chat", screen.GetPrim(), true)
 
@@ -378,7 +378,7 @@ func FriendFac(n *Friend, UIBroadcast chan *AppMessage) *tview.Frame {
 				Payload: nil,
 			}
 
-			appMess.EncodePayload(n.Username)
+			appMess.EncodePayload(n)
 
 			UIBroadcast <- &appMess
 			return nil
@@ -551,7 +551,7 @@ func FriendsScreen(s *appState) IOPrimitive {
 
 						}
 					}
-				case NotifyLogin:
+				case NotifyLogin, NotifyInactive:
 					// Set header
 					for _, p := range blankArr {
 						grid.RemoveItem(p)
@@ -858,10 +858,15 @@ func (f *ChatScreenPrimitive) GetPrim() tview.Primitive {
 	return f.prim
 }
 
-func ChatScreen(s *appState, chatLog *[]Message, username string) *ChatScreenPrimitive {
+func ChatScreen(s *appState, chatLog *[]Message, friend *Friend) *ChatScreenPrimitive {
+
+	activeState := "[red::b]Offline[white::-]"
+	if friend.Active {
+		activeState = "[green::b]Active[white::-]"
+	}
 	txt := tview.NewTextView().SetDynamicColors(true)
 	txt.SetBorder(true)
-	txt.SetTitle(fmt.Sprintf("You are chatting with %v", username))
+	txt.SetTitle(fmt.Sprintf("You are chatting with %v: %v", friend.Username, activeState))
 
 	uiCh := UIChannels{
 		RecUIMess:      make(chan *AppMessage, 3),
@@ -917,6 +922,34 @@ func ChatScreen(s *appState, chatLog *[]Message, username string) *ChatScreenPri
 					logs += fmt.Sprintf("[blue::b]%v[white::-]: %v%vSent: %v\n\n", message.Sender, message.Text, spaces, message.Date)
 					txt.SetText(logs)
 					txt.ScrollToEnd()
+				case NotifyLogin:
+					var usr string
+					err := m.DecodePayload(&usr)
+					if err != nil {
+						break
+					}
+					if usr == friend.Username {
+
+						activeState = "[green::b]Active[white::-]"
+
+						txt.SetTitle(fmt.Sprintf("You are chatting with %v: %v", friend.Username, activeState))
+
+					}
+
+				case NotifyInactive:
+					var usr string
+					err := m.DecodePayload(&usr)
+					if err != nil {
+						break
+					}
+
+					if usr == friend.Username {
+
+						activeState = "[red::b]Offline[white::-]"
+
+						txt.SetTitle(fmt.Sprintf("You are chatting with %v: %v", friend.Username, activeState))
+
+					}
 
 				default:
 					//Do nothing

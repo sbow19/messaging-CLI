@@ -28,8 +28,6 @@ type ClientConnection struct {
 func (c *ClientConnection) SendOnConnection(m Response) *RequestError {
 
 	// DEbugging with message
-
-	fmt.Println(m)
 	jsonData, err := json.Marshal(m)
 
 	if err != nil {
@@ -358,6 +356,11 @@ func (s *Server) readLoop(ws *websocket.Conn, k apiKey) {
 
 			if err == io.EOF {
 
+				// Broadcast logged in status
+				s.broadcast <- &BackendMessage{
+					Code:    BroadcastLoggedOut,
+					Payload: k,
+				}
 				// Broadcast inactive status to friends
 				break
 			}

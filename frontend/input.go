@@ -59,7 +59,7 @@ func InputBar(s *appState) IOPrimitive {
 	go func() {
 
 		//User to chat ith
-		usr := ""
+		var usr Friend
 
 		for {
 			select {
@@ -146,7 +146,7 @@ func InputBar(s *appState) IOPrimitive {
 					m.DecodePayload(&usr)
 					chat := Chat{
 						Text:     "",
-						Receiver: usr,
+						Receiver: usr.Username,
 						Sender:   s.username,
 					}
 
@@ -175,7 +175,7 @@ func InputBar(s *appState) IOPrimitive {
 					//Message object
 					chat := Chat{
 						Text:     "",
-						Receiver: usr,
+						Receiver: usr.Username,
 						Sender:   s.username,
 					}
 

@@ -39,6 +39,9 @@ func main() {
 
 	// Main routing handle func
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+
+		//
+		fmt.Println("Starting Handler")
 		// Spin off new websocket connection handler
 		wsServer.start(w, r)
 	})

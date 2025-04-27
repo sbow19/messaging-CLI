@@ -35,6 +35,7 @@ const (
 	SendMessage
 	ReceiveMessage
 	NotifyLogin
+	NotifyInactive
 )
 
 type Response interface {
@@ -155,7 +156,7 @@ func (m *ClientResponse) EncodePayload(p interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
-	case NotifyLogin:
+	case NotifyLogin, NotifyInactive:
 		// P is LoginDetails type
 		if result, ok := p.(string); ok {
 

@@ -117,7 +117,6 @@ func NewGamesView(s *appState) IOPrimitive {
 	err := s.SubscribeChannel(games.RecUIMess, UI)
 
 	if err != nil {
-		log.Println("Cannot subscribe games to Broadcast")
 		log.Fatal("Cannot subscribe games to Broadcast")
 	}
 	go func() {
