@@ -34,6 +34,7 @@ const (
 	OpenChat
 	SendMessage
 	ReceiveMessage
+	NotifyLogin
 )
 
 type Response interface {
@@ -154,6 +155,22 @@ func (m *ClientResponse) EncodePayload(p interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
+	case NotifyLogin:
+		// P is LoginDetails type
+		if result, ok := p.(string); ok {
+
+			jsonData, err := json.Marshal(result)
+
+			if err != nil {
+				return err
+			}
+
+			m.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+
 	}
 
 	return nil
@@ -232,6 +249,19 @@ func (m *ClientResponse) DecodePayload(target interface{}) error {
 	case ReceiveMessage:
 		// P is LoginDetails type
 		if _, ok := target.(*Message); ok {
+
+			err := json.Unmarshal(m.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
+	case NotifyLogin:
+		// P is LoginDetails type
+		if _, ok := target.(*string); ok {
 
 			err := json.Unmarshal(m.Payload, target)
 

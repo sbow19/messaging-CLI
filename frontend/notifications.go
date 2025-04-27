@@ -29,18 +29,20 @@ func BlankBox() *tview.Frame {
 		txt,
 	)
 	frame.SetBorderPadding(0, 0, 0, 0)
-	frame.SetBorder(true)
 
 	return frame
 
 }
 
-func NotificationBoxFac(m *Message, UIBroadcast chan *AppMessage) *tview.Frame {
+func MessageNotificationBoxFac(m *Message, UIBroadcast chan *AppMessage) *tview.Frame {
 
-	txt := tview.NewTextView()
-	txt.SetText(fmt.Sprintf("%v: %v    sent: %v ", m.Sender, m.Text, m.Date))
+	txt := tview.NewTextView().SetDynamicColors(true)
+	txt.SetText(fmt.Sprintf("[blue::b]%v[white::-]: %v\nsent: %v\n Open chat?(y) ", m.Sender, m.Text, m.Date))
 
-	txt.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	frame := tview.NewFrame(
+		txt,
+	)
+	frame.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
 		case 'y':
 			// Send app message to
@@ -52,13 +54,76 @@ func NotificationBoxFac(m *Message, UIBroadcast chan *AppMessage) *tview.Frame {
 			appMess.EncodePayload(m.Sender)
 
 			UIBroadcast <- &appMess
-			return nil
+			return event
 		}
 		return event
 	})
+
+	frame.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+
+		if event.Buttons() == tcell.Button1 {
+			// Send app message to
+			appMess := AppMessage{
+				Code:    OpenChat,
+				Payload: nil,
+			}
+
+			appMess.EncodePayload(m.Sender)
+
+			UIBroadcast <- &appMess
+			return action, event
+		}
+		return action, event
+	})
+
+	frame.SetBorderPadding(0, 0, 0, 0)
+	frame.SetBorder(true)
+
+	return frame
+}
+
+func OnlineNotificationBoxFac(user string, UIBroadcast chan *AppMessage) *tview.Frame {
+
+	txt := tview.NewTextView().SetDynamicColors(true)
+	txt.SetText(fmt.Sprintf("[green::b]%v[::-] is active.[white]\nOpen chat?(y) ", user))
+
 	frame := tview.NewFrame(
 		txt,
 	)
+	frame.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Rune() {
+		case 'y':
+			// Send app message to
+			appMess := AppMessage{
+				Code:    OpenChat,
+				Payload: nil,
+			}
+
+			appMess.EncodePayload(user)
+
+			UIBroadcast <- &appMess
+			return event
+		}
+		return event
+	})
+
+	frame.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+
+		if event.Buttons() == tcell.Button1 {
+			// Send app message to
+			appMess := AppMessage{
+				Code:    OpenChat,
+				Payload: nil,
+			}
+
+			appMess.EncodePayload(user)
+
+			UIBroadcast <- &appMess
+			return action, event
+		}
+		return action, event
+	})
+
 	frame.SetBorderPadding(0, 0, 0, 0)
 	frame.SetBorder(true)
 
@@ -137,7 +202,7 @@ func NotificationsBar(s *appState) IOPrimitive {
 					err := m.DecodePayload(&message)
 
 					if err != nil {
-						return
+						break
 					}
 
 					if message.Sender == s.username {
@@ -149,7 +214,38 @@ func NotificationsBar(s *appState) IOPrimitive {
 						resultsArr = resultsArr[1:]
 
 					}
-					notifBox := NotificationBoxFac(&message, friendBar.UIMessage)
+					notifBox := MessageNotificationBoxFac(&message, friendBar.UIMessage)
+					resultsArr = append(resultsArr, notifBox)
+
+					// Clear Grid and re add messages. 5 Recent notifications
+					for _, p := range resultsArr {
+						grid.RemoveItem(p)
+					}
+					for i, n := range resultsArr {
+						n.SetFocusFunc(func() {
+							hasFocus = i
+						})
+						grid.AddItem(n, i, 0, 1, 1, 1, 1, false)
+					}
+
+					hasFocus = 0
+					s.app.SetFocus(resultsArr[0])
+
+				case NotifyLogin:
+					var user string
+
+					err := m.DecodePayload(&user)
+
+					if err != nil {
+						break
+					}
+
+					// Create msg notification box
+					if len(resultsArr) == 5 {
+						resultsArr = resultsArr[1:]
+
+					}
+					notifBox := OnlineNotificationBoxFac(user, friendBar.UIMessage)
 					resultsArr = append(resultsArr, notifBox)
 
 					// Clear Grid and re add messages. 5 Recent notifications

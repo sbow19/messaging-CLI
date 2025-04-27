@@ -265,6 +265,12 @@ func (s *Server) authLoop(ws *websocket.Conn, k apiKey) *RequestError {
 				}
 				goto reqErrSend
 			}
+
+			// Broadcast logged in status
+			s.broadcast <- &BackendMessage{
+				Code:    BroadcastLoggedIn,
+				Payload: k,
+			}
 			return nil
 		} else {
 			// Resend auth message
@@ -351,6 +357,8 @@ func (s *Server) readLoop(ws *websocket.Conn, k apiKey) {
 		if err != nil {
 
 			if err == io.EOF {
+
+				// Broadcast inactive status to friends
 				break
 			}
 

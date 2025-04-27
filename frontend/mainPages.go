@@ -233,7 +233,8 @@ func MainScreenPages(s *appState) IOPrimitive {
 
 	// Direct focus to list
 	frontFlex.SetFocusFunc(func() {
-		s.app.SetFocus(list)
+
+		s.app.SetFocus(pages)
 	})
 
 	frontFlex.SetBorderPadding(0, 0, 0, 0)

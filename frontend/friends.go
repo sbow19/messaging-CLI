@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -71,11 +72,6 @@ func FriendsPages(s *appState) IOPrimitive {
 
 		})
 	list.SetBorder(true)
-
-	// Direct focus to list
-	pages.SetFocusFunc(func() {
-		s.app.SetFocus(list)
-	})
 
 	// Search page
 	search := SearchScreen(s)
@@ -237,6 +233,11 @@ func SearchScreen(s *appState) IOPrimitive {
 	grid.SetBorder(true)
 
 	resultsArr := []*tview.Frame{}
+	blankArr := []*tview.Frame{}
+
+	for i := 0; i < 5; i++ {
+		blankArr = append(blankArr, BlankBox())
+	}
 
 	hasFocus := 0
 	grid.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -296,6 +297,9 @@ func SearchScreen(s *appState) IOPrimitive {
 					for _, p := range resultsArr {
 						grid.RemoveItem(p)
 					}
+					for _, p := range blankArr {
+						grid.RemoveItem(p)
+					}
 
 					// DEcode results
 					var results UsersSearch
@@ -315,7 +319,25 @@ func SearchScreen(s *appState) IOPrimitive {
 					}
 
 					hasFocus = 0
+					resultArrLen := len(resultsArr)
+					if resultArrLen == 0 {
+						break
+					}
 					s.app.SetFocus(resultsArr[0])
+
+					// No of blanks
+					blanks := 5 - resultArrLen
+					if blanks <= 0 {
+						break
+					} else if blanks > 0 {
+
+						for i := 0; i < blanks; i++ {
+							grid.AddItem(
+								blankArr[i], resultArrLen+i, 0, 1, 1, 1, 1, false)
+
+						}
+					}
+
 				default:
 					// Do nothing
 				}
@@ -395,6 +417,11 @@ func FriendsScreen(s *appState) IOPrimitive {
 	grid.SetBorder(true)
 
 	resultsArr := []*tview.Frame{}
+	blankArr := []*tview.Frame{}
+
+	for i := 0; i < 5; i++ {
+		blankArr = append(blankArr, BlankBox())
+	}
 	hasFocus := 0
 	grid.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 
@@ -454,6 +481,9 @@ func FriendsScreen(s *appState) IOPrimitive {
 					for _, p := range resultsArr {
 						grid.RemoveItem(p)
 					}
+					for _, p := range blankArr {
+						grid.RemoveItem(p)
+					}
 					for i, n := range s.friends {
 						resultBox := FriendFac(&n, list.UIMessage)
 						resultBox.SetFocusFunc(func() {
@@ -464,12 +494,30 @@ func FriendsScreen(s *appState) IOPrimitive {
 					}
 
 					hasFocus = 0
-					if len(resultsArr) == 0 {
+					resultArrLen := len(resultsArr)
+
+					if resultArrLen == 0 {
 						break
 					}
 					s.app.SetFocus(resultsArr[0])
+
+					// No of blanks
+					blanks := 5 - resultArrLen
+					if blanks <= 0 {
+						break
+					} else if blanks > 0 {
+
+						for i := 0; i < blanks; i++ {
+							grid.AddItem(
+								blankArr[i], resultArrLen+i, 0, 1, 1, 1, 1, false)
+
+						}
+					}
 				case UpdateFriendContent:
 					// Set header
+					for _, p := range blankArr {
+						grid.RemoveItem(p)
+					}
 					for _, p := range resultsArr {
 						grid.RemoveItem(p)
 					}
@@ -484,11 +532,63 @@ func FriendsScreen(s *appState) IOPrimitive {
 					}
 
 					hasFocus = 0
+					resultArrLen := len(resultsArr)
 
-					if len(resultsArr) == 0 {
+					if resultArrLen == 0 {
 						break
 					}
 					s.app.SetFocus(resultsArr[0])
+
+					// No of blanks
+					blanks := 5 - resultArrLen
+					if blanks <= 0 {
+						break
+					} else if blanks > 0 {
+
+						for i := 0; i < blanks; i++ {
+							grid.AddItem(
+								blankArr[i], resultArrLen+i, 0, 1, 1, 1, 1, false)
+
+						}
+					}
+				case NotifyLogin:
+					// Set header
+					for _, p := range blankArr {
+						grid.RemoveItem(p)
+					}
+					for _, p := range resultsArr {
+						grid.RemoveItem(p)
+					}
+					for i, n := range s.friends {
+
+						resultBox := FriendFac(&n, list.UIMessage)
+						resultBox.SetFocusFunc(func() {
+							hasFocus = i
+						})
+						resultsArr = append(resultsArr, resultBox)
+						grid.AddItem(resultBox, i, 0, 1, 1, 1, 1, false)
+					}
+
+					hasFocus = 0
+					resultArrLen := len(resultsArr)
+
+					if resultArrLen == 0 {
+						break
+					}
+					s.app.SetFocus(resultsArr[0])
+
+					// No of blanks
+					blanks := 5 - resultArrLen
+					if blanks <= 0 {
+						break
+					} else if blanks > 0 {
+
+						for i := 0; i < blanks; i++ {
+							grid.AddItem(
+								blankArr[i], resultArrLen+i, 0, 1, 1, 1, 1, false)
+
+						}
+					}
 
 				default:
 					// Do nothing
@@ -589,6 +689,11 @@ func PendingScreen(s *appState) IOPrimitive {
 	grid.SetBorder(true)
 
 	resultsArr := []*tview.Frame{}
+	blankArr := []*tview.Frame{}
+
+	for i := 0; i < 5; i++ {
+		blankArr = append(blankArr, BlankBox())
+	}
 	hasFocus := 0
 	grid.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 
@@ -649,28 +754,7 @@ func PendingScreen(s *appState) IOPrimitive {
 					for _, p := range resultsArr {
 						grid.RemoveItem(p)
 					}
-					for i, n := range s.friendRequests {
-
-						resultBox := RequestBoxFac(&n, s.networkBroadcast)
-						resultBox.SetFocusFunc(func() {
-							hasFocus = i
-						})
-						resultsArr = append(resultsArr, resultBox)
-						grid.AddItem(resultBox, i, 0, 1, 1, 1, 1, false)
-					}
-
-					hasFocus = 0
-					if len(resultsArr) == 0 {
-						break
-					}
-					s.app.SetFocus(resultsArr[0])
-
-				case AllContent:
-
-					hasFocus = 0
-
-					// Set header
-					for _, p := range resultsArr {
+					for _, p := range blankArr {
 						grid.RemoveItem(p)
 					}
 					for i, n := range s.friendRequests {
@@ -684,10 +768,67 @@ func PendingScreen(s *appState) IOPrimitive {
 					}
 
 					hasFocus = 0
-					if len(resultsArr) == 0 {
+					resultArrLen := len(resultsArr)
+
+					if resultArrLen == 0 {
 						break
 					}
 					s.app.SetFocus(resultsArr[0])
+
+					// No of blanks
+					blanks := 5 - resultArrLen
+					if blanks <= 0 {
+						break
+					} else if blanks > 0 {
+
+						for i := 0; i < blanks; i++ {
+							grid.AddItem(
+								blankArr[i], resultArrLen+i, 0, 1, 1, 1, 1, false)
+
+						}
+					}
+
+				case AllContent:
+
+					hasFocus = 0
+
+					// Set header
+					for _, p := range resultsArr {
+						grid.RemoveItem(p)
+					}
+					for _, p := range blankArr {
+						grid.RemoveItem(p)
+					}
+					for i, n := range s.friendRequests {
+
+						resultBox := RequestBoxFac(&n, s.networkBroadcast)
+						resultBox.SetFocusFunc(func() {
+							hasFocus = i
+						})
+						resultsArr = append(resultsArr, resultBox)
+						grid.AddItem(resultBox, i, 0, 1, 1, 1, 1, false)
+					}
+
+					hasFocus = 0
+					resultArrLen := len(resultsArr)
+
+					if resultArrLen == 0 {
+						break
+					}
+					s.app.SetFocus(resultsArr[0])
+
+					// No of blanks
+					blanks := 5 - resultArrLen
+					if blanks <= 0 {
+						break
+					} else if blanks > 0 {
+
+						for i := 0; i < blanks; i++ {
+							grid.AddItem(
+								blankArr[i], resultArrLen+i, 0, 1, 1, 1, 1, false)
+
+						}
+					}
 				default:
 					// Do nothing
 				}
@@ -718,7 +859,7 @@ func (f *ChatScreenPrimitive) GetPrim() tview.Primitive {
 }
 
 func ChatScreen(s *appState, chatLog *[]Message, username string) *ChatScreenPrimitive {
-	txt := tview.NewTextView()
+	txt := tview.NewTextView().SetDynamicColors(true)
 	txt.SetBorder(true)
 	txt.SetTitle(fmt.Sprintf("You are chatting with %v", username))
 
@@ -742,9 +883,13 @@ func ChatScreen(s *appState, chatLog *[]Message, username string) *ChatScreenPri
 	}
 
 	logs := ""
+	unifGap := 60
 
 	for _, c := range *chatLog {
-		logs += fmt.Sprintf("%v: %v    Sent: %v\n\n", c.Sender, c.Text, c.Date)
+
+		length := len(c.Sender + ": " + c.Text)
+		spaces := strings.Repeat(" ", unifGap-length)
+		logs += fmt.Sprintf("[blue::b]%v[white::-]: %v%vSent: %v\n\n", c.Sender, c.Text, spaces, c.Date)
 	}
 	txt.SetText(logs)
 
@@ -767,7 +912,9 @@ func ChatScreen(s *appState, chatLog *[]Message, username string) *ChatScreenPri
 						break
 					}
 
-					logs += fmt.Sprintf("%v: %q    Sent: %v\n\n", message.Sender, message.Text, message.Date)
+					length := len(message.Sender + ": " + message.Text)
+					spaces := strings.Repeat(" ", unifGap-length)
+					logs += fmt.Sprintf("[blue::b]%v[white::-]: %v%vSent: %v\n\n", message.Sender, message.Text, spaces, message.Date)
 					txt.SetText(logs)
 					txt.ScrollToEnd()
 

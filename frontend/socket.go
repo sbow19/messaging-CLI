@@ -247,6 +247,37 @@ readLoop:
 
 				c.UIBroadcast <- &appMessage
 
+			case NotifyLogin:
+				var user string
+				var err error
+				err = response.DecodePayload(&user)
+
+				if err != nil {
+					log.Fatal(err)
+
+				}
+
+				// Update active status globally
+				err = state.SetFriendActiveStatus(
+					user,
+					true,
+				)
+
+				if err != nil {
+					log.Fatal(err)
+
+				}
+
+				appMessage := AppMessage{
+					Code:    NotifyLogin,
+					Message: "User logged in",
+					Payload: nil,
+				}
+
+				appMessage.EncodePayload(user)
+
+				c.UIBroadcast <- &appMessage
+
 			default:
 
 			}

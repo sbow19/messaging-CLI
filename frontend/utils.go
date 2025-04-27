@@ -47,7 +47,7 @@ type Question struct {
 	ref func(input string) // reference to property in struct
 }
 
-func PromptFlow(ctx context.Context, code MessageCode, order *Questions, m string, input *tview.TextArea, output chan *AppMessage, qArea *tview.Frame, content interface{}) error {
+func PromptFlow(ctx context.Context, code MessageCode, order *Questions, m string, input *tview.TextArea, output chan *AppMessage, ui chan *AppMessage, qArea *tview.Frame, content interface{}) error {
 
 	//Question numbers
 	i := 0
@@ -132,8 +132,12 @@ func PromptFlow(ctx context.Context, code MessageCode, order *Questions, m strin
 		// Do nothing
 	}
 
-	// Broadcast message to network part of app
 	output <- &aMess
+	// Broadcast message to network part of app
+	switch code {
+	case SendMessage:
+		ui <- &aMess
+	}
 
 	return nil
 }

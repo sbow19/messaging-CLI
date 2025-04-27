@@ -25,12 +25,12 @@ func (f *FramePrimitive) GetPrim() tview.Primitive {
 func InputBar(s *appState) IOPrimitive {
 
 	// Input part
-	textarea := tview.NewTextArea().SetPlaceholder("Type...")
+	textarea := tview.NewTextArea().SetPlaceholder("Type...").SetSize(1, 100)
 	textarea.SetBorder(true)
 
 	// Input frame, prompt changes
 	frame := tview.NewFrame(textarea).
-		SetBorders(1, 0, 1, 0, 1, 1)
+		SetBorders(2, 0, 1, 0, 1, 1)
 
 	uiCh := UIChannels{
 		RecUIMess:      make(chan *AppMessage, 3),
@@ -97,10 +97,10 @@ func InputBar(s *appState) IOPrimitive {
 							},
 						},
 					}
-					go PromptFlow(ctx, m.Code, &questions, m.Message, textarea, input.NetworkMessage, input.prim, &loginDetails)
+					go PromptFlow(ctx, m.Code, &questions, m.Message, textarea, input.NetworkMessage, s.UIBroadcast, input.prim, &loginDetails)
 				case SearchUsers, SearchUsersResults:
 					if !s.loggedIn {
-						continue
+						break
 					}
 					// Cancel any previous prompt
 					if cancelPrompt != nil {
@@ -120,7 +120,7 @@ func InputBar(s *appState) IOPrimitive {
 							},
 						},
 					}
-					go PromptFlow(ctx, m.Code, &questions, m.Message, textarea, input.NetworkMessage, input.prim, &user)
+					go PromptFlow(ctx, m.Code, &questions, m.Message, textarea, input.NetworkMessage, s.UIBroadcast, input.prim, &user)
 				case GameStart:
 					// Cancel any previous prompt
 					if cancelPrompt != nil {
@@ -136,7 +136,6 @@ func InputBar(s *appState) IOPrimitive {
 						cancelPrompt()
 					}
 
-					input.prim.Clear()
 					textarea.SetText("", false)
 
 					// Create a new context for this message
@@ -159,15 +158,14 @@ func InputBar(s *appState) IOPrimitive {
 							},
 						},
 					}
-					go PromptFlow(ctx, SendMessage, &questions, m.Message, textarea, input.NetworkMessage, input.prim, &chat)
+					go PromptFlow(ctx, SendMessage, &questions, m.Message, textarea, input.NetworkMessage, s.UIBroadcast, input.prim, &chat)
 
-				case ReceiveMessage:
+				case SendMessage:
 					// Cancel any previous prompt
 					if cancelPrompt != nil {
 						cancelPrompt()
 					}
 
-					input.prim.Clear()
 					textarea.SetText("", false)
 
 					// Create a new context for this message
@@ -189,7 +187,7 @@ func InputBar(s *appState) IOPrimitive {
 							},
 						},
 					}
-					go PromptFlow(ctx, SendMessage, &questions, m.Message, textarea, input.NetworkMessage, input.prim, &chat)
+					go PromptFlow(ctx, SendMessage, &questions, m.Message, textarea, input.NetworkMessage, s.UIBroadcast, input.prim, &chat)
 
 				default:
 					/*Do Nothing*/

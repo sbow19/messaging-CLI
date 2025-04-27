@@ -11,6 +11,7 @@ const (
 	BroadcastFriendship BackendMessageCode = iota
 	BroadcastFriendRequest
 	BroadcastChat
+	BroadcastLoggedIn
 )
 
 type BackendMessage struct {
@@ -22,6 +23,30 @@ func AppListener(s *Server) {
 
 	for message := range s.broadcast {
 		switch message.Code {
+		case BroadcastLoggedIn:
+			if userId, ok := message.Payload.(apiKey); ok {
+
+				// Get API key and get all friends in db
+				friendIds, err := dbConn.GetFriendsById(string(userId))
+				if err != nil {
+					fmt.Println(err)
+					break
+				}
+
+				res := UserMap[userId]
+
+				for _, id := range *friendIds {
+
+					fri := UserMap[apiKey(id)]
+
+					if !fri.loggedIn {
+						continue
+					}
+					go SendLoggedIn(id, res.username, s)
+
+				}
+
+			}
 		case BroadcastFriendship:
 			// handle friendship broadcast
 			if userIds, ok := message.Payload.(*[]string); ok {
@@ -34,11 +59,23 @@ func AppListener(s *Server) {
 			// handle friendship broadcast
 			if friendRequestId, ok := message.Payload.(string); ok {
 
+				var userIds *[]string
+				var err error
 				// Get user ids from friendship id
-				userIds, err := dbConn.GetFriendRequestById(friendRequestId)
+				userIds, err = dbConn.GetFriendRequestById(friendRequestId)
 				if err != nil {
 					fmt.Println(err)
-					return
+					break
+				}
+
+				if len(*userIds) == 0 {
+					// Get user ids from friendship id
+					userIds, err = dbConn.GetFriendshipById(friendRequestId)
+				}
+
+				if err != nil {
+					fmt.Println(err)
+					break
 				}
 
 				// Get user content per id, if active in UserMap
@@ -54,7 +91,7 @@ func AppListener(s *Server) {
 
 				if !ok {
 					fmt.Println("Error getting chat broadcast")
-					return
+					break
 				}
 
 				// First user id is always the requesting user
@@ -65,6 +102,32 @@ func AppListener(s *Server) {
 		default:
 			// Do nothing
 		}
+	}
+}
+
+func SendLoggedIn(friendId string, user string, s *Server) {
+
+	// Generate client response
+	clientResp := ClientResponse{
+		Code:    NotifyLogin,
+		Err:     nil,
+		Message: "Friend logged in",
+		Payload: nil,
+	}
+
+	clientResp.EncodePayload(user)
+
+	jsonData, err := json.Marshal(&clientResp)
+
+	if err != nil {
+		return
+	}
+
+	_, errr := s.clients[apiKey(friendId)].conn.Write(jsonData)
+
+	if errr != nil {
+		fmt.Println(errr)
+		return
 	}
 }
 

@@ -158,6 +158,21 @@ func (a *AppMessage) EncodePayload(p interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
+	case NotifyLogin:
+		// P is LoginDetails type
+		if result, ok := p.(string); ok {
+
+			jsonData, err := json.Marshal(result)
+
+			if err != nil {
+				return err
+			}
+
+			a.Payload = jsonData
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
 
 	}
 
@@ -299,6 +314,19 @@ func (a *AppMessage) DecodePayload(target interface{}) error {
 		} else {
 			return fmt.Errorf("incorrect details")
 		}
+	case NotifyLogin:
+		// P is LoginDetails type
+		if _, ok := target.(*string); ok {
+
+			err := json.Unmarshal(a.Payload, target)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return fmt.Errorf("incorrect details")
+		}
 
 	}
 
@@ -369,6 +397,21 @@ func (m *appState) AssignAllContent(u *UserContent) error {
 
 }
 
+func (m *appState) SetFriendActiveStatus(u string, active bool) error {
+	m.rwmu.Lock()
+	defer m.rwmu.Unlock()
+
+	newSlice := m.friends[:0]
+	for _, f := range m.friends {
+		if f.Username == u {
+			f.Active = active
+		}
+		newSlice = append(newSlice, f)
+	}
+
+	return nil
+}
+
 func (m *appState) AssignFriendshipContent(u *UserContent) error {
 	m.rwmu.Lock()
 	defer m.rwmu.Unlock()
@@ -383,7 +426,14 @@ func (m *appState) AppendMessage(u *Message) error {
 	m.rwmu.Lock()
 	defer m.rwmu.Unlock()
 
-	m.messages[u.Receiver] = append(m.messages[u.Receiver], *u)
+	switch u.Receiver {
+	case m.username:
+		m.messages[u.Sender] = append(m.messages[u.Sender], *u)
+	default:
+		m.messages[u.Receiver] = append(m.messages[u.Receiver], *u)
+
+	}
+
 	return nil
 
 }
@@ -527,7 +577,7 @@ func main() {
 
 func logger(s *appState) {
 	// Choose a known TTY path (you need to know this or find it dynamically)
-	ttyPath := "/dev/pts/0" // Change this to your actual terminal device!
+	ttyPath := "/dev/pts/1" // Change this to your actual terminal device!
 
 	// Open that terminal's device file
 	tty, err := os.OpenFile(ttyPath, os.O_WRONLY, 0600)
@@ -552,9 +602,8 @@ func messageBroker(s *appState) {
 		select {
 		case m := <-s.UIBroadcast:
 
-			for i, sub := range s.UISubscriptions {
+			for _, sub := range s.UISubscriptions {
 
-				log.Println(i, m)
 				// Broadcast message on subscribed UI element
 				sub <- m
 			}

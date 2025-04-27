@@ -623,6 +623,59 @@ retErr:
 	}
 }
 
+// Get all friends associaetd with a user by user id
+func (c *DBConn) GetFriendsById(userId string) (*[]string, error) {
+	var err error
+	var rows *sql.Rows
+	var stmt *sql.Stmt
+	var output []string
+
+	// Query db
+	stmt, err = c.db.Prepare(
+		`
+		SELECT * FROM friends
+		WHERE user1 = ? OR user2 = ?
+		;
+		`,
+	)
+	if err != nil {
+		goto retErr
+	}
+	defer stmt.Close()
+
+	rows, err = stmt.Query(userId, userId)
+	if err != nil {
+		goto retErr
+	}
+	defer rows.Close()
+
+	// Data to write into output text file
+	for rows.Next() {
+
+		var friendshipId string
+		var user1 string
+		var user2 string
+
+		if err := rows.Scan(&friendshipId, &user1, &user2); err != nil {
+			goto retErr
+		}
+
+		if user1 == userId {
+			output = append(output, user2)
+		} else {
+			output = append(output, user1)
+
+		}
+	}
+
+	return &output, nil
+
+retErr:
+	{
+		return nil, err
+	}
+}
+
 func generateId() (string, error) {
 	bytes := make([]byte, 16)
 	if _, err := rand.Read(bytes); err != nil {
@@ -636,9 +689,11 @@ func (c *DBConn) SetFriendRequest(name string, reqId string) (string, error) {
 	var err error
 	var stmt *sql.Stmt
 	var userSearch *UsersSearch
+	var friendSearch *[]string
 	var id string
 	var resId string
 
+	// Search for the id of the receiver of the friend request
 	userSearch, err = c.GetUserAPI(name)
 
 	var tx *sql.Tx
@@ -657,7 +712,18 @@ func (c *DBConn) SetFriendRequest(name string, reqId string) (string, error) {
 	}
 
 	if len(*userSearch) > 0 {
-		return (*userSearch)[0], fmt.Errorf("friend request already exists")
+		return (*userSearch)[0], fmt.Errorf("friend request already sent")
+	}
+
+	// Check to see if they are already friends
+	friendSearch, err = c.GetFriendshipByIds(resId, reqId)
+
+	if err != nil {
+		goto retErr
+	}
+
+	if len(*friendSearch) > 0 {
+		return (*friendSearch)[0], fmt.Errorf("Users already friends")
 	}
 
 	//Friend request id
