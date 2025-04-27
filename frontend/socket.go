@@ -99,7 +99,6 @@ func dialBackend(state *appState, addr net.Addr) {
 	conn, err := websocket.DialConfig(config)
 	if err != nil {
 		// Send UI message
-		log.Println(err)
 		aMess := AppMessage{
 			Code:    ConnectionError,
 			Message: "Error connecting to server",
@@ -416,12 +415,12 @@ func ListenForBroadcast(myAppState *appState) {
 	for {
 
 		//
-		n, addr, err := pc.ReadFrom(buf)
+		_, addr, err := pc.ReadFrom(buf)
 		if err != nil {
 			panic(err)
 		}
 
-		log.Printf("%s sent this: %s\n", addr, buf[:n])
+		// log.Println("Packet received")
 
 		go func() {
 			// Blocks until connection is lost, then retry takes place

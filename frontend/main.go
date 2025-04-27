@@ -551,7 +551,7 @@ func main() {
 	app := tview.NewApplication()
 
 	myAppState := NewAppState(app)
-	go logger(myAppState)
+	// go logger(myAppState)
 
 	// Mnage intra-app messages
 	go messageBroker(myAppState)
@@ -571,7 +571,7 @@ func main() {
 
 func logger(s *appState) {
 	// Choose a known TTY path (you need to know this or find it dynamically)
-	ttyPath := "/dev/pts/0" // Change this to your actual terminal device!
+	ttyPath := "/dev/pts/1" // Change this to your actual terminal device!
 
 	// Open that terminal's device file
 	tty, err := os.OpenFile(ttyPath, os.O_WRONLY, 0600)
