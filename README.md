@@ -18,11 +18,11 @@ manually at this point.
 
 ## Demo Video
 
--[Searching and adding friends]()
+-[Searching and adding friends](https://vimeo.com/1079479952)
 
--[Messaging]()
+-[Messaging](https://vimeo.com/1079479966)
 
--[Snake game]()
+-[Snake game](https://vimeo.com/1079479995)
 
 
 ## Features
